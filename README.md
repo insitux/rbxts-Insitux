@@ -17,7 +17,7 @@
     <td>
       <a href="https://discord.gg/w3Fc4YZ9Qw">
         Talk with us
-        <img src="website/DiscordLogo.png" alt="Insitux logo" height="16">
+        <img src="https://phunanon.github.io/Insitux/website/DiscordLogo.png" alt="Insitux logo" height="16">
       </a>
     </td>
   </tr>
