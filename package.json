@@ -1,0 +1,36 @@
+{
+  "name": "@rbxts/rbxts-insitux",
+  "version": "21.10.8",
+  "description": "Extendible s-expression scripting language enabling users to safely mod Roblox games themselves.",
+  "main": "out/index.lua",
+  "scripts": {
+    "build": "rbxtsc",
+    "watch": "rbxtsc -w",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [],
+  "author": "Patrick Bowen",
+  "license": "MIT",
+  "types": "out/index.d.ts",
+  "files": [
+    "out"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@rbxts/compiler-types": "^1.2.3-types.1",
+    "@rbxts/types": "^1.0.537",
+    "@typescript-eslint/eslint-plugin": "^4.33.0",
+    "@typescript-eslint/parser": "^4.33.0",
+    "eslint": "^7.32.0",
+    "eslint-config-prettier": "^8.3.0",
+    "eslint-plugin-prettier": "^4.0.0",
+    "eslint-plugin-roblox-ts": "^0.0.31",
+    "prettier": "^2.4.1",
+    "typescript": "^4.4.3"
+  },
+  "dependencies": {
+    "@rbxts/t": "^2.1.5"
+  }
+}
