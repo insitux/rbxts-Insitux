@@ -135,7 +135,7 @@ export function tokenise(
         (c === "." && isDigit(nextCh)) ||
         (c === "-" && (isDigit(nextCh) || nextCh === "."));
       inSymbol = !inNumber;
-      let typ: Token["typ"] = inSymbol ? "sym" : "num";
+      const typ: Token["typ"] = inSymbol ? "sym" : "num";
       tokens.push({ typ, text: "", errCtx });
     }
     tokens[len(tokens) - 1].text += c;
@@ -225,7 +225,8 @@ export function typeCheck(
   const nArg = len(args);
   if (onlyNum) {
     const nonNumArgIdx = args.findIndex(
-      a => !!len(a) && (optimistic ? !a.find(t => t === "num") : a[0] !== "num"),
+      a =>
+        !!len(a) && (optimistic ? !a.find(t => t === "num") : a[0] !== "num"),
     );
     if (nonNumArgIdx === -1) {
       return;
@@ -247,7 +248,7 @@ export function typeCheck(
       if (isArray(need)) {
         if (
           optimistic
-            ? argTypes.some(t => has(need, t))
+            ? !len(argTypes) || argTypes.some(t => has(need, t))
             : len(argTypes) === 1 && has(need, argTypes[0])
         ) {
           return false;
@@ -258,7 +259,7 @@ export function typeCheck(
       } else {
         if (
           optimistic
-            ? has(argTypes, need)
+            ? !len(argTypes) || has(argTypes, need)
             : len(argTypes) === 1 && need === argTypes[0]
         ) {
           return false;
@@ -417,10 +418,16 @@ function parseForm(
     return [...body, { typ: "ret", value: !!len(body), errCtx }];
   }
 
-  //Operation arity check
+  //Operation arity check, optionally disabled for partial closures
   if (ops[op] && checkArity) {
     const errors = arityCheck(op, nArgs, errCtx);
     push(headIns, errors?.map(e => err(e.m)[0]) ?? []);
+    if (!errors) {
+      //Upgrade some math and logic functions to their fast counterparts
+      if (nArgs === 2 && ops[`fast${op}`]) {
+        op = `fast${op}`;
+      }
+    }
   }
 
   if (len(headIns)) {
@@ -670,18 +677,22 @@ function insErrorDetect(fins: Ins[]): InvokeError[] {
           }
           const { returns, numeric: onlyNum } = ops[head.val.v];
           stack.push(
-            onlyNum && onlyNum !== "in only" ? { types: ["num"] } : { types: returns },
+            onlyNum && onlyNum !== "in only"
+              ? { types: ["num"] }
+              : { types: returns },
           );
         } else if (headIs("num")) {
           const badArg = badMatch(["str", "dict", "vec"]);
           if (badArg !== -1) {
             return numOpErr(ins.errCtx, args[badArg].types!);
           }
+          stack.push({});
         } else if (headIs("key")) {
           const badArg = badMatch(["dict", "vec"]);
           if (badArg !== -1) {
             return keyOpErr(ins.errCtx, args[badArg].types!);
           }
+          stack.push({});
         }
         break;
       }
