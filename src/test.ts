@@ -337,6 +337,11 @@ const tests: {
     code: `(function f (+ 1 (into {} {})))`,
     err: ["Type"],
   },
+  {
+    name: "Parser type error 3",
+    code: `(function f (if true (into 2 {}) (+ 2 2)))`,
+    err: ["Type"],
+  },
 ];
 
 export async function doTests(
@@ -346,7 +351,7 @@ export async function doTests(
     invocationId: string,
     print: boolean,
   ) => Promise<InvokeError[]>,
-  terse: boolean = true,
+  terse = true,
 ): Promise<string[]> {
   const results: {
     okErr: boolean;
@@ -400,7 +405,7 @@ export async function doTests(
   const totalMs = results.reduce((sum, { elapsedMs }) => sum + elapsedMs, 0);
   const numPassed = len(results.filter(({ okOut, okErr }) => okOut && okErr));
   return concat(
-    results.filter(r => !terse || !r.okOut || !r.okErr).map(r => r.display),
+    results.filter((r) => !terse || !r.okOut || !r.okErr).map((r) => r.display),
     [`---- ${numPassed}/${len(results)} tests passed in ${totalMs}ms.`],
   );
 }

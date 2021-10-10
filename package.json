@@ -1,8 +1,8 @@
 {
   "name": "@rbxts/insitux",
-  "version": "21.10.8",
-  "description": "Extendible s-expression scripting language enabling users to safely mod Roblox games themselves.",
-  "main": "out/index.lua",
+  "version": "21.10.10",
+  "description": "Extendible s-expression scripting language enabling players to safely mod Roblox games themselves.",
+  "main": "out/init.lua",
   "scripts": {
     "build": "rbxtsc",
     "watch": "rbxtsc -w",

@@ -27,7 +27,8 @@ Successor to [Chika](https://github.com/phunanon/Chika),
 [Epizeuxis](https://github.com/phunanon/Epizeuxis), and
 [Kuan](https://github.com/phunanon/Kuan).
 
-[**Roblox-ts npm package**](https://github.com/insitux/rbxts-Insitux)
+[**Main Github repository**](https://github.com/phunanon/Insitux)
+[**Roblox-ts NPM package**](https://www.npmjs.com/package/@rbxts/insitux) and its [Github repository](https://github.com/insitux/rbxts-Insitux).
 
 ## Usage
 
@@ -120,9 +121,6 @@ built-in operations each within an example, with results after a `→`.
 ;Like if, but either executes all arguments or returns null
 (when true (print-str "hi") 123)
 → hi123
-
-;Yields the mathematical Pi
-(pi) → 3.141592653589793
 
 ;Various arithmetic operators which take one or more arguments
 ;Note: fast+ fast- fast* fast/ fast// are also available for two arguments only
@@ -436,19 +434,21 @@ etc
 (print "Hello") ;Comment at the end of lines too
 ```
 
-- Commas `,` are treated as whitespace
+- Commas `,` are treated as whitespace.
 
 - Write `\"` inside of a string to represent `"`, `\n` to represent a newline,
   `\t` to represent a tab character.
 
 - Write decimal numbers either `0.123` or `.123`.
 
+- Pi and Euler's number are accessible through constants `PI` and `E`
+
 - `args` contains a vector of arguments the function was called with.
 
 - Arguments can also be accessed through `%0`, `%1`, `%2`, etc, with `%` the
-  same as `%0`
+  same as `%0`.
 
-  - Accessing too high a number will return `null`
+  - Accessing too high a number will return `null`.
 
 - Parameters take precedence over lets and defines.
 

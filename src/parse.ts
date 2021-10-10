@@ -146,7 +146,7 @@ export function tokenise(
 function segment(tokens: Token[]): Token[][] {
   const segments: Token[][] = [[]];
   let depth = 0;
-  tokens.forEach(token => {
+  tokens.forEach((token) => {
     segments[len(segments) - 1].push(token);
     depth += toNum(token.typ === "(") - toNum(token.typ === ")");
     if (depth === 0) {
@@ -161,9 +161,9 @@ function funcise(segments: Token[][]): NamedTokens[] {
     len(segment) > 1 &&
     segment[1].typ === "sym" &&
     segment[1].text === "function";
-  const funcs = segments.filter(t => isFunc(t));
-  const entries = flat(segments.filter(t => !isFunc(t)));
-  const described = funcs.map(tokens => ({
+  const funcs = segments.filter((t) => isFunc(t));
+  const entries = flat(segments.filter((t) => !isFunc(t)));
+  const described = funcs.map((tokens) => ({
     name: tokens[2].text,
     tokens: slice(tokens, 3),
     errCtx: tokens[2].errCtx,
@@ -225,13 +225,13 @@ export function typeCheck(
   const nArg = len(args);
   if (onlyNum) {
     const nonNumArgIdx = args.findIndex(
-      a =>
-        !!len(a) && (optimistic ? !a.find(t => t === "num") : a[0] !== "num"),
+      (a) =>
+        !!len(a) && (optimistic ? !a.find((t) => t === "num") : a[0] !== "num"),
     );
     if (nonNumArgIdx === -1) {
       return;
     }
-    const names = args[nonNumArgIdx]!.map(t => typeNames[t]).join(", ");
+    const names = args[nonNumArgIdx]!.map((t) => typeNames[t]).join(", ");
     return [
       typeErr(`${op} takes numeric arguments only, not ${names}`, errCtx),
     ];
@@ -248,13 +248,13 @@ export function typeCheck(
       if (isArray(need)) {
         if (
           optimistic
-            ? !len(argTypes) || argTypes.some(t => has(need, t))
+            ? !len(argTypes) || argTypes.some((t) => has(need, t))
             : len(argTypes) === 1 && has(need, argTypes[0])
         ) {
           return false;
         }
-        const names = argTypes.map(t => typeNames[t]);
-        const needs = need.map(t => typeNames[t]).join(", ");
+        const names = argTypes.map((t) => typeNames[t]);
+        const needs = need.map((t) => typeNames[t]).join(", ");
         return `argument ${i + 1} must be either: ${needs}, not ${names}`;
       } else {
         if (
@@ -264,13 +264,13 @@ export function typeCheck(
         ) {
           return false;
         }
-        const names = argTypes.map(t => typeNames[t]);
+        const names = argTypes.map((t) => typeNames[t]);
         return `argument ${i + 1} must be ${typeNames[need]}, not ${names}`;
       }
     })
-    .filter(r => !!r);
+    .filter((r) => !!r);
   return len(typeViolations)
-    ? typeViolations.map(v => typeErr(<string>v, errCtx))
+    ? typeViolations.map((v) => typeErr(<string>v, errCtx))
     : undefined;
 }
 
@@ -373,7 +373,7 @@ function parseForm(
       push(ins, head);
       ins.push({ typ: "if", value: insCount - len(head), errCtx });
       ins.push({ typ: "pop", value: len(args), errCtx });
-      args.forEach(as => push(ins, as));
+      args.forEach((as) => push(ins, as));
       ins.push({ typ: "loo", value: -(insCount + 1), errCtx });
       return ins;
     }
@@ -421,7 +421,7 @@ function parseForm(
   //Operation arity check, optionally disabled for partial closures
   if (ops[op] && checkArity) {
     const errors = arityCheck(op, nArgs, errCtx);
-    push(headIns, errors?.map(e => err(e.m)[0]) ?? []);
+    push(headIns, errors?.map((e) => err(e.m)[0]) ?? []);
     if (!errors) {
       //Upgrade some math and logic functions to their fast counterparts
       if (nArgs === 2 && ops[`fast${op}`]) {
@@ -465,9 +465,9 @@ function parseArg(
     len(tokens) &&
     tokens[0].typ === "("
   ) {
-    const texts = tokens.map(t => t.text);
+    const texts = tokens.map((t) => t.text);
     const body = parseArg(tokens, params, text !== "@");
-    const err = body.find(t => t.typ === "err");
+    const err = body.find((t) => t.typ === "err");
     if (err) {
       return [err];
     }
@@ -501,6 +501,9 @@ function parseArg(
         return [{ typ: "npa", value: params.indexOf(text), errCtx }];
       } else if (text === "args") {
         return [{ typ: "upa", value: -1, errCtx }];
+      } else if (text === "PI" || text === "E") {
+        const v = text === "PI" ? 3.141592653589793 : 2.718281828459045;
+        return [{ typ: "val", value: { t: "num", v }, errCtx }];
       } else if (ops[text]) {
         return [{ typ: "val", value: <Val>{ t: "func", v: text }, errCtx }];
       }
@@ -515,29 +518,17 @@ function parseArg(
   }
 }
 
-function partitionWhen<T>(
-  array: T[],
-  predicate: (item: T) => boolean,
-): [T[], T[]] {
-  const a: T[] = [],
-    b: T[] = [];
-  for (let i = 0, isB = false; i < len(array); ++i) {
-    isB ||= predicate(array[i]);
-    (isB ? b : a).push(array[i]);
-  }
-  return [a, b];
-}
-
 function syntaxise(
   { name, tokens }: NamedTokens,
   errCtx: ErrCtx,
 ): ["func", Func] | ["err", InvokeError] {
   const err = (m: string, eCtx = errCtx) =>
     <ReturnType<typeof syntaxise>>["err", { e: "Parse", m, errCtx: eCtx }];
-  const [params, body] = partitionWhen(
-    tokens,
-    t => t.typ !== "sym" || sub("%#@", t.text),
+  const firstNonParam = tokens.findIndex(
+    (t) => t.typ !== "sym" || sub("%#@", t.text),
   );
+  const params = slice(tokens, 0, firstNonParam);
+  const body = slice(tokens, firstNonParam);
   //In the case of e.g. (function (+))
   if (name === "(") {
     return err("nameless function");
@@ -565,11 +556,11 @@ function syntaxise(
       ins,
       parseArg(
         body,
-        params.map(p => p.text),
+        params.map((p) => p.text),
       ),
     );
   }
-  const parseError = ins.find(i => i.typ === "err");
+  const parseError = ins.find((i) => i.typ === "err");
   if (parseError) {
     return err(<string>parseError.value, parseError.errCtx);
   }
@@ -642,7 +633,7 @@ function tokenErrorDetect(stringError: number[] | undefined, tokens: Token[]) {
   return errors;
 }
 
-function insErrorDetect(fins: Ins[]): InvokeError[] {
+function insErrorDetect(fins: Ins[]): InvokeError[] | undefined {
   type TypeInfo = {
     types?: Val["t"][];
     val?: Val;
@@ -659,7 +650,7 @@ function insErrorDetect(fins: Ins[]): InvokeError[] {
         const args = splice(stack, len(stack) - ins.value, ins.value);
         const badMatch = (okTypes: Val["t"][]) =>
           args.findIndex(
-            ({ types }) => types && !okTypes.find(t => has(types, t)),
+            ({ types }) => types && !okTypes.find((t) => has(types, t)),
           );
         const headIs = (t: Val["t"]) =>
           head.val
@@ -668,7 +659,7 @@ function insErrorDetect(fins: Ins[]): InvokeError[] {
         if (head.val && head.val.t === "func") {
           const errors = typeCheck(
             head.val.v,
-            args.map(a => a.types ?? []),
+            args.map((a) => a.types ?? []),
             ins.errCtx,
             true,
           );
@@ -686,14 +677,13 @@ function insErrorDetect(fins: Ins[]): InvokeError[] {
           if (badArg !== -1) {
             return numOpErr(ins.errCtx, args[badArg].types!);
           }
-          stack.push({});
         } else if (headIs("key")) {
           const badArg = badMatch(["dict", "vec"]);
           if (badArg !== -1) {
             return keyOpErr(ins.errCtx, args[badArg].types!);
           }
-          stack.push({});
         }
+        stack.push({});
         break;
       }
       case "cat":
@@ -701,6 +691,7 @@ function insErrorDetect(fins: Ins[]): InvokeError[] {
       case "var":
       case "let":
       case "loo":
+      case "jmp":
         break;
       case "clo":
       case "par": {
@@ -714,12 +705,17 @@ function insErrorDetect(fins: Ins[]): InvokeError[] {
       case "upa":
         stack.push({});
         break;
-      case "if":
+      case "if": {
         stack.pop();
         stack.push({});
-      case "jmp":
-        i += ins.value - (ins.typ === "if" ? 1 : 0);
+        const ifIns = slice(fins, i + 1, ins.value + 1);
+        const errors = insErrorDetect(ifIns);
+        if (errors) {
+          return errors;
+        }
+        i += ins.value - 1;
         break;
+      }
       case "pop":
       case "rec":
         splice(stack, len(stack) - ins.value, ins.value);
@@ -733,7 +729,6 @@ function insErrorDetect(fins: Ins[]): InvokeError[] {
         assertUnreachable(ins);
     }
   }
-  return [];
 }
 
 export function parse(
@@ -747,7 +742,7 @@ export function parse(
   }
   const segments = segment(tokens);
   const labelled = funcise(segments);
-  const funcsAndErrors = labelled.map(named =>
+  const funcsAndErrors = labelled.map((named) =>
     syntaxise(named, {
       invocationId,
       line: named.errCtx.line,
@@ -756,15 +751,15 @@ export function parse(
   );
   const okFuncs: Func[] = [],
     errors: InvokeError[] = [];
-  funcsAndErrors.forEach(fae => {
+  funcsAndErrors.forEach((fae) => {
     if (fae[0] === "err") {
       errors.push(fae[1]);
     } else {
       okFuncs.push(fae[1]);
     }
   });
-  push(errors, flat(okFuncs.map(f => insErrorDetect(f.ins))));
+  push(errors, flat(okFuncs.map((f) => insErrorDetect(f.ins) ?? [])));
   const funcs: Funcs = {};
-  okFuncs.forEach(func => (funcs[func.name] = func));
+  okFuncs.forEach((func) => (funcs[func.name] = func));
   return { errors, funcs };
 }

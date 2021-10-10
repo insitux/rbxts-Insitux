@@ -91,7 +91,6 @@ export const ops: {
   min: { minArity: 2, numeric: true },
   max: { minArity: 2, numeric: true },
   abs: { exactArity: 1, numeric: true },
-  pi: { exactArity: 0, numeric: true },
   sqrt: { exactArity: 1, numeric: true },
   round: { exactArity: 1, numeric: true },
   floor: { exactArity: 1, numeric: true },
@@ -214,7 +213,7 @@ export const typeErr = (m: string, errCtx: ErrCtx): InvokeError => ({
 });
 
 export function numOpErr(errCtx: ErrCtx, types: Val["t"][]): InvokeError[] {
-  const names = types.map(t => typeNames[t]).join(", ");
+  const names = types.map((t) => typeNames[t]).join(", ");
   return [
     typeErr(
       `number as operation argument must be string, vector, or dictionary, not ${names}`,
@@ -224,7 +223,7 @@ export function numOpErr(errCtx: ErrCtx, types: Val["t"][]): InvokeError[] {
 }
 
 export function keyOpErr(errCtx: ErrCtx, types: Val["t"][]): InvokeError[] {
-  const names = types.map(t => typeNames[t]).join(", ");
+  const names = types.map((t) => typeNames[t]).join(", ");
   return [
     typeErr(
       `keyword as operation argument must be dictionary or vector, not ${names}`,

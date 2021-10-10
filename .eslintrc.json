@@ -27,6 +27,7 @@
 				"useTabs": false
 			}
 		],
-		"roblox-ts/lua-truthiness": "off"
+		"roblox-ts/lua-truthiness": "off",
+		"roblox-ts/no-delete": "off"
 	}
 }
