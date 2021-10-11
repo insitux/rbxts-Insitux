@@ -1,6 +1,6 @@
 {
   "name": "@rbxts/insitux",
-  "version": "21.10.10",
+  "version": "21.10.11",
   "description": "Extendible s-expression scripting language enabling players to safely mod Roblox games themselves.",
   "main": "out/init.lua",
   "scripts": {
@@ -8,7 +8,7 @@
     "watch": "rbxtsc -w",
     "prepublishOnly": "npm run build"
   },
-  "keywords": [],
+  "keywords": ["language", "interpreter", "programming-language", "scripting-language", "repl", "modding"],
   "author": "Patrick Bowen",
   "license": "MIT",
   "types": "out/index.d.ts",
