@@ -3,9 +3,6 @@
 		// required
 		"allowSyntheticDefaultImports": true,
 		"downlevelIteration": true,
-		"jsx": "react",
-		"jsxFactory": "Roact.createElement",
-		"jsxFragmentFactory": "Roact.Fragment",
 		"module": "commonjs",
 		"moduleResolution": "Node",
 		"noLib": true,

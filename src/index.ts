@@ -1,5 +1,5 @@
-export const insituxVersion = 20211011;
-import { asBoo, isEqual } from "./checks";
+export const insituxVersion = 20211013;
+import { asBoo } from "./checks";
 import { arityCheck, keyOpErr, numOpErr, typeCheck, typeErr } from "./checks";
 import { parse } from "./parse";
 import * as pf from "./poly-fills";
@@ -11,10 +11,10 @@ const { trim, trimStart, trimEnd } = pf;
 const { getTimeMs, randInt, randNum } = pf;
 const { isNum, len, objKeys, range, toNum } = pf;
 import { doTests } from "./test";
-import { assertUnreachable, typeNames, InvokeError } from "./types";
-import { Ctx, Dict, ErrCtx, Func, Ins, Val, ops } from "./types";
-import { asArray, num, str, stringify, toDict, val2str, vec } from "./val";
-import { dic, dictDrop, dictGet, dictSet } from "./val";
+import { assertUnreachable, InvokeError, InvokeResult } from "./types";
+import { Ctx, Dict, ErrCtx, Func, Ins, Val, ops, typeNames } from "./types";
+import { asArray, isEqual, num, str, stringify, val2str, vec } from "./val";
+import { dic, dictDrop, dictGet, dictSet, toDict } from "./val";
 
 let stack: Val[] = [];
 let lets: { [key: string]: Val }[] = [];
@@ -298,124 +298,146 @@ async function exeOp(
     case "filter":
     case "remove":
     case "find":
-    case "count":
-      {
-        const closure = getExe(ctx, args.shift()!, errCtx);
-        const okT = (t: Val["t"]) => t === "vec" || t === "str" || t === "dict";
-        const badArg =
-          op === "map" || op === "for"
-            ? args.findIndex(({ t }) => !okT(t))
-            : okT(args[0].t)
-            ? -1
-            : 0;
+    case "count": {
+      const closure = getExe(ctx, args.shift()!, errCtx);
+      if (op === "map" || op === "for") {
+        const badArg = args.findIndex(
+          ({ t }) => t !== "vec" && t !== "str" && t !== "dict",
+        );
         if (badArg !== -1) {
           const badType = typeNames[args[badArg].t];
           return tErr(
-            `argument 2 must be either: string, vector, dictionary, not ${badType}`,
+            `argument ${
+              badArg + 2
+            } must be either: string, vector, dictionary, not ${badType}`,
           );
         }
+      }
 
-        if (op === "for") {
-          const arrays = args.map(asArray);
-          const lims = arrays.map(len);
-          const divisors = lims.map((_, i) =>
-            slice(lims, 0, i + 1).reduce((sum, l) => sum * l),
-          );
-          divisors.unshift(1);
-          const lim = divisors.pop()!;
-          if (lim > ctx.loopBudget) {
-            return [{ e: "Budget", m: "would exceed loop budget", errCtx }];
-          }
-          const array: Val[] = [];
-          for (let t = 0; t < lim; ++t) {
-            const argIdxs = divisors.map((d, i) => floor((t / d) % lims[i]));
-            const errors = await closure(arrays.map((a, i) => a[argIdxs[i]]));
-            if (errors) {
-              return errors;
-            }
-            array.push(stack.pop()!);
-          }
-          _vec(array);
-          return;
+      if (op === "for") {
+        const arrays = args.map(asArray);
+        const lims = arrays.map(len);
+        const divisors = lims.map((_, i) =>
+          slice(lims, 0, i + 1).reduce((sum, l) => sum * l),
+        );
+        divisors.unshift(1);
+        const lim = divisors.pop()!;
+        if (lim > ctx.loopBudget) {
+          return [{ e: "Budget", m: "would exceed loop budget", errCtx }];
         }
-
-        if (op === "map") {
-          const arrays = args.map(asArray);
-          const shortest = min(...arrays.map(len));
-          const array: Val[] = [];
-          for (let i = 0; i < shortest; ++i) {
-            const errors = await closure(arrays.map((a) => a[i]));
-            if (errors) {
-              return errors;
-            }
-            array.push(stack.pop()!);
-          }
-          _vec(array);
-          return;
-        }
-
-        const array = asArray(args.shift()!);
-        if (op !== "reduce") {
-          const isRemove = op === "remove",
-            isFind = op === "find",
-            isCount = op === "count";
-          const filtered: Val[] = [];
-          let count = 0;
-          for (let i = 0, lim = len(array); i < lim; ++i) {
-            const errors = await closure([array[i], ...args]);
-            if (errors) {
-              return errors;
-            }
-            const b = asBoo(stack.pop()!);
-            if (isCount) {
-              count += b ? 1 : 0;
-              continue;
-            }
-            if (isFind && b) {
-              stack.push(array[i]);
-              return;
-            }
-            if (!isFind && b !== isRemove) {
-              filtered.push(array[i]);
-            }
-          }
-          switch (op) {
-            case "count":
-              _num(count);
-              return;
-            case "find":
-              _nul();
-              return;
-            default:
-              _vec(filtered);
-              return;
-          }
-        }
-
-        if (!len(array)) {
-          if (len(args)) {
-            stack.push(args[0]);
-          } else {
-            _vec();
-          }
-          return;
-        }
-        if (len(array) < 2 && !len(args)) {
-          push(stack, array);
-          return;
-        }
-
-        let reduction: Val = (len(args) ? args : array).shift()!;
-        for (let i = 0, lim = len(array); i < lim; ++i) {
-          const errors = await closure([reduction, array[i]]);
+        const array: Val[] = [];
+        for (let t = 0; t < lim; ++t) {
+          const argIdxs = divisors.map((d, i) => floor((t / d) % lims[i]));
+          const errors = await closure(arrays.map((a, i) => a[argIdxs[i]]));
           if (errors) {
             return errors;
           }
-          reduction = stack.pop()!;
+          array.push(stack.pop()!);
         }
-        stack.push(reduction);
+        _vec(array);
+        return;
       }
+
+      if (op === "map") {
+        const arrays = args.map(asArray);
+        const shortest = min(...arrays.map(len));
+        const array: Val[] = [];
+        for (let i = 0; i < shortest; ++i) {
+          const errors = await closure(arrays.map((a) => a[i]));
+          if (errors) {
+            return errors;
+          }
+          array.push(stack.pop()!);
+        }
+        _vec(array);
+        return;
+      }
+
+      const array = asArray(args.shift()!);
+      if (op !== "reduce") {
+        const isRemove = op === "remove",
+          isFind = op === "find",
+          isCount = op === "count";
+        const filtered: Val[] = [];
+        let count = 0;
+        for (let i = 0, lim = len(array); i < lim; ++i) {
+          const errors = await closure([array[i], ...args]);
+          if (errors) {
+            return errors;
+          }
+          const b = asBoo(stack.pop()!);
+          if (isCount) {
+            count += b ? 1 : 0;
+          } else if (isFind) {
+            if (b) {
+              stack.push(array[i]);
+              return;
+            }
+          } else if (b !== isRemove) {
+            filtered.push(array[i]);
+          }
+        }
+        switch (op) {
+          case "count":
+            _num(count);
+            return;
+          case "find":
+            _nul();
+            return;
+        }
+        _vec(filtered);
+        return;
+      }
+
+      if (!len(array)) {
+        if (len(args)) {
+          stack.push(args[0]);
+        } else {
+          _vec();
+        }
+        return;
+      }
+      if (len(array) < 2 && !len(args)) {
+        push(stack, array);
+        return;
+      }
+
+      let reduction: Val = (len(args) ? args : array).shift()!;
+      for (let i = 0, lim = len(array); i < lim; ++i) {
+        const errors = await closure([reduction, array[i]]);
+        if (errors) {
+          return errors;
+        }
+        reduction = stack.pop()!;
+      }
+      stack.push(reduction);
       return;
+    }
+    case "repeat": {
+      const toRepeat = args.shift()!;
+      const result: Val[] = [];
+      const count = num(args[0]);
+      if (count > ctx.rangeBudget) {
+        return [{ e: "Budget", m: "would exceed range budget", errCtx }];
+      }
+      ctx.rangeBudget -= count;
+      if (toRepeat.t === "func" || toRepeat.t === "clo") {
+        const closure = getExe(ctx, toRepeat, errCtx);
+        for (let i = 0; i < count; ++i) {
+          const errors = await closure([{ t: "num", v: i }]);
+          if (errors) {
+            return errors;
+          }
+          result.push(stack.pop()!);
+        }
+      } else {
+        for (let i = 0; i < count; ++i) {
+          result.push(toRepeat);
+        }
+      }
+      _vec(result);
+      return;
+    }
     case "rand-int":
     case "rand":
       {
@@ -573,7 +595,7 @@ async function exeOp(
         return;
       }
       if (count > ctx.rangeBudget) {
-        return [{ e: "Budget", m: "range budget depleted", errCtx }];
+        return [{ e: "Budget", m: "would exceed range budget", errCtx }];
       }
       ctx.rangeBudget -= count;
       const nums = range(count).map((n) => n * step + x);
@@ -676,7 +698,13 @@ function getExe(
   errCtx: ErrCtx,
   checkArity = true,
 ): (params: Val[]) => Promise<InvokeError[] | undefined> {
-  const monoArityError = [{ e: "Arity", m: `one argument required`, errCtx }];
+  const monoArityError = [
+    {
+      e: "Arity",
+      m: `${typeNames[op.t]} as op requires one sole argument`,
+      errCtx,
+    },
+  ];
   if (op.t === "str" || op.t === "func") {
     const name = op.v;
     if (ops[name]) {
@@ -936,7 +964,7 @@ async function exeFunc(
         break;
       case "ret":
         if (ins.value) {
-          splice(stack, 0, len(stack) - 1);
+          splice(stack, stackLen - 1, len(stack) - stackLen - 1);
         } else {
           _nul();
         }
@@ -996,7 +1024,15 @@ async function exeFunc(
           //Rewrite partial closure to #(... func [args] args)
           if (ins.typ === "par") {
             const { value: exeNumArgs, errCtx } = cins.pop()!;
-            cins.unshift(cins.pop()!);
+            //If has expression as head
+            if (len(cins) > 0 && cins[len(cins) - 1].typ === "exe") {
+              const headStartIdx = cins.findIndex((i) => i.typ === "exp");
+              const head = splice(cins, headStartIdx, len(cins) - headStartIdx);
+              push(head, cins);
+              cins = head;
+            } else {
+              cins.unshift(cins.pop()!);
+            }
             cins.push({ typ: "upa", value: -1, errCtx });
             cins.push({
               typ: "val",
@@ -1007,6 +1043,8 @@ async function exeFunc(
           }
           stack.push(<Val>{ t: "clo", v: <Func>{ name, ins: cins } });
         }
+        break;
+      case "exp":
         break;
       default:
         assertUnreachable(ins);
@@ -1038,56 +1076,63 @@ async function parseAndExe(
 /**
  * Parses and executes the given code.
  * @param ctx An environment context you retain.
- * @param code The code you want to have parsed and executed.
- * @param sourceId A unique ID for this source, used in immediate or future errors.
- * @param printResult Whether you want to automatically print the final returned value of this invocation.
- * @returns Invocation errors caused during execution of the code.
+ * @param code The code to parse and execute.
+ * @param sourceId A unique ID used in immediate or future invocation errors.
+ * @param printResult Automatically print the final value of this invocation?
+ * @returns Invocation errors caused during execution of the code,
+ *          or the final value of the invocation.
  */
 export async function invoke(
   ctx: Ctx,
   code: string,
   sourceId: string,
   printResult = false,
-): Promise<InvokeError[]> {
+): Promise<InvokeResult> {
   const { callBudget, loopBudget, recurBudget, rangeBudget } = ctx;
   const errors = await parseAndExe(ctx, code, sourceId);
-  ctx.callBudget = callBudget;
-  ctx.recurBudget = recurBudget;
-  ctx.loopBudget = loopBudget;
-  ctx.rangeBudget = rangeBudget;
+  [ctx.callBudget, ctx.recurBudget] = [callBudget, recurBudget];
+  [ctx.loopBudget, ctx.rangeBudget] = [loopBudget, rangeBudget];
   delete ctx.env.funcs["entry"];
-  if (!errors && printResult && len(stack)) {
-    await ctx.exe("print", [{ t: "str", v: val2str(stack[len(stack) - 1]) }]);
+  const value = stack.pop();
+  [stack, lets] = [[], []];
+  if (printResult && !errors && value) {
+    await ctx.exe("print", [{ t: "str", v: val2str(value) }]);
   }
-  stack = [];
-  lets = [];
-  return errors ?? [];
+  return errors
+    ? { kind: "errors", errors }
+    : value
+    ? { kind: "val", value }
+    : { kind: "empty" };
 }
 
 /**
  * Executes a user-defined Insitux function by name.
  * @param ctx An environment context you retain.
- * @param funcName The function you want to execute.
- * @param args The arguments you want to pass to the function.
- * @returns Invocation errors caused during execution of the function, or undefined if the function was not found.
+ * @param funcName The function to execute.
+ * @param args The arguments to pass to the function.
+ * @returns Invocation errors caused during execution of the function,
+ *          or the final value of the invocation,
+ *          or undefined if the function was not found.
  */
 export async function invokeFunction(
   ctx: Ctx,
   funcName: string,
   args: Val[],
-): Promise<undefined | InvokeError[]> {
+): Promise<InvokeResult | undefined> {
   const { callBudget, loopBudget, recurBudget, rangeBudget } = ctx;
   if (!(funcName in ctx.env.funcs)) {
     return;
   }
   const errors = await exeFunc(ctx, ctx.env.funcs[funcName], args);
-  ctx.callBudget = callBudget;
-  ctx.recurBudget = recurBudget;
-  ctx.loopBudget = loopBudget;
-  ctx.rangeBudget = rangeBudget;
-  stack = [];
-  lets = [];
-  return errors ?? [];
+  [ctx.callBudget, ctx.recurBudget] = [callBudget, recurBudget];
+  [ctx.loopBudget, ctx.rangeBudget] = [loopBudget, rangeBudget];
+  const value = stack.pop()!;
+  [stack, lets] = [[], []];
+  return errors
+    ? { kind: "errors", errors }
+    : value
+    ? { kind: "val", value }
+    : { kind: "empty" };
 }
 
 /**
@@ -1096,11 +1141,12 @@ export async function invokeFunction(
  * @returns List of symbols defined in Insitux, including built-in operations, (optionally) syntax, constants, and user-defined functions.
  */
 export function symbols(ctx: Ctx, alsoSyntax = true): string[] {
-  let syms = alsoSyntax ? ["function", "let", "var"] : [];
+  let syms = alsoSyntax ? ["function", "let", "var", "if", "if!", "while"] : [];
   push(syms, ["args", "PI", "E"]);
   syms = concat(syms, objKeys(ops));
   syms = concat(syms, objKeys(ctx.env.funcs));
   syms = concat(syms, objKeys(ctx.env.vars));
   const hidden = ["entry"];
-  return syms.filter((o) => !has(hidden, o));
+  syms = syms.filter((o) => !has(hidden, o));
+  return sortBy(syms, (a, b) => (a > b ? 1 : -1));
 }

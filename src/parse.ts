@@ -194,7 +194,7 @@ function parseAllArgs(tokens: Token[], params: string[]) {
 function parseForm(
   tokens: Token[],
   params: string[],
-  checkArity = true,
+  inPartial = true,
 ): ParserIns[] {
   const head = tokens.shift();
   if (!head) {
@@ -233,13 +233,17 @@ function parseForm(
       push(ins, val);
       ins.push({ typ: op, value: def.value, errCtx });
     }
-  } else if (op === "if" || op === "when") {
+  } else if (op === "if" || op === "if!" || op === "when") {
     const cond = parseArg(tokens, params);
     if (!len(cond)) {
       return err("must provide condition");
     }
     const ins: ParserIns[] = cond;
-    if (op === "if") {
+    if (op === "if!") {
+      ins.push({ typ: "val", value: { t: "func", v: "!" }, errCtx });
+      ins.push({ typ: "exe", value: 1, errCtx });
+    }
+    if (op === "if" || op === "if!") {
       const ifT = parseArg(tokens, params);
       if (!len(ifT)) {
         return err("must provide a branch");
@@ -316,10 +320,13 @@ function parseForm(
   }
   const headIns: Ins[] = [];
   let nArgs = 0;
-  //Head is a form or parameter
+  //Head is a expression or parameter
   if (typ === "(" || has(params, text) || sub("%#@", strIdx(text, 0))) {
     tokens.unshift(head);
     const ins = parseArg(tokens, params);
+    if (inPartial) {
+      headIns.push({ typ: "exp", value: len(ins), errCtx });
+    }
     push(headIns, ins);
   }
   const body: Ins[] = [];
@@ -336,7 +343,7 @@ function parseForm(
   }
 
   //Operation arity check, optionally disabled for partial closures
-  if (ops[op] && checkArity) {
+  if (ops[op] && !inPartial) {
     const errors = arityCheck(op, nArgs, errCtx);
     push(headIns, errors?.map((e) => err(e.m)[0]) ?? []);
     if (!errors) {
@@ -369,7 +376,7 @@ function parseForm(
 function parseArg(
   tokens: Token[],
   params: string[],
-  checkArity = true,
+  inPartial = false,
 ): ParserIns[] {
   if (!len(tokens)) {
     return [];
@@ -383,7 +390,7 @@ function parseArg(
     tokens[0].typ === "("
   ) {
     const texts = tokens.map((t) => t.text);
-    const body = parseArg(tokens, params, text !== "@");
+    const body = parseArg(tokens, params, text === "@");
     const err = body.find((t) => t.typ === "err");
     if (err) {
       return [err];
@@ -426,7 +433,7 @@ function parseArg(
       }
       return [{ typ: "ref", value: text, errCtx }];
     case "(":
-      return parseForm(tokens, params, checkArity);
+      return parseForm(tokens, params, inPartial);
     case ")":
     case "rem":
       return [];
@@ -477,9 +484,11 @@ function syntaxise(
       ),
     );
   }
-  const parseError = ins.find((i) => i.typ === "err");
-  if (parseError) {
-    return err(<string>parseError.value, parseError.errCtx);
+  for (let i = 0, lim = len(ins); i < lim; i++) {
+    const x = ins[i];
+    if (x.typ === "err") {
+      return err(x.value, x.errCtx);
+    }
   }
   return ["func", { name, ins: <Ins[]>ins }];
 }
@@ -601,9 +610,12 @@ function insErrorDetect(fins: Ins[]): InvokeError[] | undefined {
             return keyOpErr(ins.errCtx, args[badArg].types!);
           }
           stack.push({});
+        } else if (headIs("str") || headIs("bool")) {
+          stack.push({});
         }
         break;
       }
+      case "exp":
       case "cat":
       case "or":
       case "var":

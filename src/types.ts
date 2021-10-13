@@ -9,9 +9,18 @@ export type Val =
 
 export type ErrCtx = { sourceId: string; line: number; col: number };
 export type InvokeError = { e: string; m: string; errCtx: ErrCtx };
-export type ValAndErr =
+export type ValOrErr =
   | { kind: "val"; value: Val }
   | { kind: "err"; err: string };
+/**
+ * @summary "empty" occurs when there was only function declaration;
+ *          "val" occurs when there were no errors and there is a final value;
+ *          "errors" occurs when there were any errors.
+ */
+export type InvokeResult =
+  | { kind: "empty" }
+  | { kind: "val"; value: Val }
+  | { kind: "errors"; errors: InvokeError[] };
 
 export type Dict = {
   keys: Val[];
@@ -30,8 +39,8 @@ export type Env = {
 
 export type Ctx = {
   set: (key: string, val: Val) => Promise<string | undefined>;
-  get: (key: string) => Promise<ValAndErr>;
-  exe: (name: string, args: Val[]) => Promise<ValAndErr>;
+  get: (key: string) => Promise<ValOrErr>;
+  exe: (name: string, args: Val[]) => Promise<ValOrErr>;
   env: Env;
   loopBudget: number;
   rangeBudget: number;
@@ -44,6 +53,7 @@ export type Ins = { errCtx: ErrCtx } & (
   | { typ: "npa" | "upa"; value: number } //Named and Unnamed parameters
   | { typ: "var" | "let" | "ref"; value: string }
   | { typ: "exe"; value: number } //Execute last stack value, number of args
+  | { typ: "exp"; value: number } //Marks the start of an expression as head for potential partial closures
   | { typ: "or" | "if" | "jmp" | "loo" | "cat"; value: number } //number of instructions
   | { typ: "ret"; value: boolean } //Return, with value?
   | { typ: "rec"; value: number } //Recur, number of args
@@ -131,15 +141,23 @@ export const ops: {
   idx: { minArity: 2, maxArity: 3, types: [["str", "vec"]], returns: ["num"] },
   map: { minArity: 2, returns: ["vec"] },
   for: { minArity: 2, returns: ["vec"] },
-  reduce: { minArity: 2, maxArity: 3 },
-  filter: { minArity: 2, returns: ["vec"] },
-  remove: { minArity: 2, returns: ["vec"] },
-  find: { minArity: 2 },
-  count: { minArity: 2, returns: ["num"] },
+  reduce: { minArity: 2, maxArity: 3, types: [[], ["vec", "dict", "str"]] },
+  filter: {
+    minArity: 2,
+    types: [[], ["vec", "dict", "str"]],
+    returns: ["vec"],
+  },
+  remove: {
+    minArity: 2,
+    types: [[], ["vec", "dict", "str"]],
+    returns: ["vec"],
+  },
+  find: { minArity: 2, types: [[], ["vec", "dict", "str"]] },
+  count: { minArity: 2, types: [[], ["vec", "dict", "str"]], returns: ["num"] },
+  repeat: { minArity: 2, types: [[], "num"] },
   str: { returns: ["str"] },
   rand: { maxArity: 2, numeric: true, returns: ["num"] },
   "rand-int": { maxArity: 2, numeric: true, returns: ["num"] },
-  while: {},
   "..": { minArity: 2 },
   "...": { minArity: 2 },
   into: {
@@ -168,7 +186,7 @@ export const ops: {
   vals: { exactArity: 1, types: ["dict"] },
   do: { minArity: 1 },
   val: { minArity: 1 },
-  range: { minArity: 1, maxArity: 3, numeric: true },
+  range: { minArity: 1, maxArity: 3, numeric: "in only", returns: ["vec"] },
   "empty?": {
     exactArity: 1,
     types: [["str", "vec", "dict"]],

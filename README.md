@@ -34,9 +34,9 @@ Exposed are `invoke()` and `invokeFunction()`. Both require a `Ctx` instance, al
 
 ```ts
 export type Ctx = {
-  set: (key: string, val: Val) => Promise<ExternalError>;
-  get: (key: string) => Promise<ValAndErr>;
-  exe: (name: string, args: Val[]) => Promise<ValAndErr>;
+  set: (key: string, val: Val) => Promise<string | undefined>;
+  get: (key: string) => Promise<ValOrErr>;
+  exe: (name: string, args: Val[]) => Promise<ValOrErr>;
   env: Env;
   loopBudget: number;
   rangeBudget: number;
