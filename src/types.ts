@@ -38,9 +38,9 @@ export type Env = {
 };
 
 export type Ctx = {
-  set: (key: string, val: Val) => Promise<string | undefined>;
-  get: (key: string) => Promise<ValOrErr>;
-  exe: (name: string, args: Val[]) => Promise<ValOrErr>;
+  set: (key: string, val: Val) => string | undefined;
+  get: (key: string) => ValOrErr;
+  exe: (name: string, args: Val[]) => ValOrErr;
   env: Env;
   loopBudget: number;
   rangeBudget: number;
@@ -56,7 +56,6 @@ export type Ins = { errCtx: ErrCtx } & (
   | { typ: "exp"; value: number } //Marks the start of an expression as head for potential partial closures
   | { typ: "or" | "if" | "jmp" | "loo" | "cat"; value: number } //number of instructions
   | { typ: "ret"; value: boolean } //Return, with value?
-  | { typ: "rec"; value: number } //Recur, number of args
   | { typ: "pop"; value: number } //Truncate stack, by number of values
   | { typ: "clo" | "par"; value: [string, Ins[]] } //Closure and partial, text representation and instructions
 );
@@ -111,6 +110,14 @@ export const ops: {
   log10: { exactArity: 1, numeric: true },
   and: { minArity: 1 },
   or: { minArity: 1 },
+  xor: { exactArity: 2 },
+  "&": { exactArity: 2, numeric: true },
+  "|": { exactArity: 2, numeric: true },
+  "^": { exactArity: 2, numeric: true },
+  "~": { exactArity: 1, numeric: true },
+  "<<": { exactArity: 2, numeric: true },
+  ">>": { exactArity: 2, numeric: true },
+  ">>>": { exactArity: 2, numeric: true },
   "odd?": { exactArity: 1, numeric: "in only", returns: ["bool"] },
   "even?": { exactArity: 1, numeric: "in only", returns: ["bool"] },
   "pos?": { exactArity: 1, numeric: "in only", returns: ["bool"] },
@@ -158,6 +165,7 @@ export const ops: {
   str: { returns: ["str"] },
   rand: { maxArity: 2, numeric: true, returns: ["num"] },
   "rand-int": { maxArity: 2, numeric: true, returns: ["num"] },
+  ".": { minArity: 1 },
   "..": { minArity: 2 },
   "...": { minArity: 2 },
   into: {
@@ -208,6 +216,7 @@ export const ops: {
   symbols: { exactArity: 0, returns: ["vec"] },
   eval: { exactArity: 1, types: ["str"] },
   reset: { exactArity: 0 },
+  recur: {},
 };
 
 export const typeNames = {

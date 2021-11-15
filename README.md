@@ -34,9 +34,9 @@ Exposed are `invoke()` and `invokeFunction()`. Both require a `Ctx` instance, al
 
 ```ts
 export type Ctx = {
-  set: (key: string, val: Val) => Promise<string | undefined>;
-  get: (key: string) => Promise<ValOrErr>;
-  exe: (name: string, args: Val[]) => Promise<ValOrErr>;
+  set: (key: string, val: Val) => string | undefined;
+  get: (key: string) => ValOrErr;
+  exe: (name: string, args: Val[]) => alOrErr;
   env: Env;
   loopBudget: number;
   rangeBudget: number;
@@ -62,7 +62,7 @@ If anybody could improve this guide please make a PR!
 ## Various examples
 
 ```clj
-; Test if 2D coordinate are inside 2D area
+; Test if 2D point is inside 2D area
 (function inside-2d? X Y areaX areaY areaW areaH
   (and (<= areaX X (+ areaX areaW))
        (<= areaY Y (+ areaY areaH))))
@@ -98,11 +98,17 @@ If anybody could improve this guide please make a PR!
 
 
 ; Palindrome checker
-(function palindrome? text
-  (.. and (map = text (reverse text))))
+;Note: returning non-false or non-null is truthy in Insitux
+(function palindrome? x
+  (.. and (map = x (reverse x))))
+;or
+(function palindrome? x
+  (= x (reverse x))) ;Works even for lists as Insitux does deep equality checks
 
-(palindrome? "aabbxbbaa") → true
+(palindrome? "aabbxbbaa") → "aabbxbbaa"
 (palindrome? "abcd")      → false
+(palindrome? [0 1 2])     → false
+(palindrome? [2 1 2])     → [2 1 2]
 
 
 ; Clojure's juxt
@@ -132,6 +138,17 @@ If anybody could improve this guide please make a PR!
 → {"h" 1, "e" 1, "l" 2, "o" 1}
 
 
+; Clojure's -> analog
+(function ->>
+  (if (= (len args) 1) (return (0 args)))
+  (... recur ((1 args) (0 args)) (sect args 2)))
+(->> (range 10)
+    @(filter odd?)
+    @(map #(* % %))
+    @(reduce +))
+→ 165
+
+
 ; Deduplicate a list recursively
 (function dedupe list -out
   (let out  (or -out [])
@@ -148,7 +165,7 @@ If anybody could improve this guide please make a PR!
 
 ; Time a function call
 (function measure
-  (let report [(time) (.. .. args) (time)])
+  (let report [(time) (.. . args) (time)])
   (str (1 report) " took " (- (2 report) (0 report)) "ms"))
 
 (measure fib 35) → "9227465 took 45500ms"
@@ -166,28 +183,29 @@ If anybody could improve this guide please make a PR!
            y  (+ (* 2 x y) c_im)
            x  x2
            i  (inc i)))
-    (str (if (zero? %) "\n" "") (if (< i depth) "#" " ")))
+    (str ((zero? %) "\n" "") (i "ABCDEFGHIJ ")))
     (range width) (range height))))
 
-(mandelbrot 48 32 10)
+(mandelbrot 56 32 10)
 
 
 ; Convert nested arrays and dictionaries into HTML
 (function vec->html v
-  (if (vec? v)
-    (let has-attr (dict? (1 v))
-         attr (if has-attr (map #(str " " (0 %) "=\"" (1 %)) (1 v)) "")
-         tag (0 v)
-         html (.. str "<" tag attr ">"
-                (map vec->html (sect v (if has-attr 2 1)))
-                "</" tag ">"))
-    v))
+  (if! (vec? v) (return v))
+  (let has-attr (dict? (1 v))
+       attr (if! has-attr ""
+              (map #(str " " (0 %) "=\"" (1 %) "\"") (1 v)))
+       tag (0 v)
+       html (.. str "<" tag attr ">"
+              (map vec->html (sect v (if has-attr 2 1)))
+              "</" tag ">")))
 
 (vec->html
   ["div"
     ["h2" "Hello"]
-    ["p" ".PI is " ["b" PI] "."]
-    ["p" "Find more info about Insitux on "
+    ["p" ".PI is " ["b" (round PI 2)] "."]
+    ["p" "Find more about Insitux on "
        ["a" {"href" "https://github.com/phunanon/Insitux"}
           "Github"]]])
+→ "<div><h2>Hello</h2><p>.PI is <b>3.14</b>.</p><p>Find more about Insitux on <a href="https://github.com/phunanon/Insitux">Github</a></p></div>"
 ```
