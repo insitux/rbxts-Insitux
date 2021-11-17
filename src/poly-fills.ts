@@ -1,8 +1,12 @@
+import { t } from "@rbxts/t";
+
+const is_table = t.array(t.any);
+
 function combine<T extends defined>(arr: (T[] | T)[]): T[] {
   const _result: T[] = [];
   const _combine = (arr: T[]) => {
     arr.forEach((element) => {
-      if (typeIs(element, "table")) {
+      if (is_table(element)) {
         _combine(element as unknown as T[]);
       } else {
         _result.push(element);
@@ -148,8 +152,8 @@ export const ceil = math.ceil;
 export const abs = math.abs;
 export const sign = math.sign;
 export const pi = math.pi;
-//A future solution must be found which can truly detect an array, not just obj
-export const isArray = (x: unknown): x is unknown[] => typeIs(x, "table");
+
+export const isArray = (x: unknown): x is unknown[] => t.array(t.any)(x);
 
 export const logn = (x: number) => math.log(x);
 export const log2 = (x: number) => math.log(x, 2);
