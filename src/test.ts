@@ -53,6 +53,14 @@ const tests: {
     code: `[(when 123 (print "hi") 234) (when false (print "bye"))]`,
     out: `hi\n[234 null]`,
   },
+  {
+    name: "match and wildcard",
+    code: `(match [1 2]
+             [0 0] (print "hello")
+             [0 2] (print "bye")
+             [1 _] "hey")`,
+    out: `hey`,
+  },
   { name: "Cond number head", code: `((if false 1 2) [:a :b :c])`, out: `:c` },
   {
     name: "and & short-circuit",
@@ -312,6 +320,13 @@ const tests: {
            (dedupe [1 1 2 3 3 3])`,
     out: `[1 2 3]`,
   },
+  {
+    name: "frequencies",
+    code: `(function frequencies list
+             (reduce #(push % %1 (inc (or (% %1) 0))) list {}))
+           (frequencies "12121212")`,
+    out: `{"1" 4, "2" 4}`,
+  },
   //Test environment functions
   {
     name: "set get",
@@ -324,11 +339,10 @@ const tests: {
   { name: "Imbalanced parens 1", code: `(print ("hello!")`, err: ["Parse"] },
   { name: "Imbalanced parens 2", code: `print "hello!")`, err: ["Parse"] },
   {
-    name: "Imbalanced quotes 1",
+    name: "Imbalanced quotes",
     code: `(print "Hello)`,
-    err: ["Parse", "Parse"],
+    err: ["Parse"],
   },
-  { name: "Imbalanced quotes 2", code: `print "Hello")`, err: ["Parse"] },
   { name: "Function as op", code: `(function)`, err: ["Parse"] },
   { name: "Function without name", code: `(function (+))`, err: ["Parse"] },
   { name: "Function without body", code: `(function func)`, err: ["Parse"] },

@@ -173,4 +173,7 @@ export const trimEnd = (str: string) => {
   return res;
 };
 
+export const charCode = (str: string): number => utf8.codes(str)()[0];
+export const codeChar = (num: number): string => utf8.char(num);
+
 export const getTimeMs = () => tick() * 1000;

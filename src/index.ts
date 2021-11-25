@@ -1,4 +1,4 @@
-export const insituxVersion = 20211115;
+export const insituxVersion = 20211125;
 import { asBoo } from "./checks";
 import { arityCheck, keyOpErr, numOpErr, typeCheck, typeErr } from "./checks";
 import { parse } from "./parse";
@@ -7,7 +7,7 @@ const { abs, cos, sin, tan, sign, sqrt, floor, ceil, round, max, min } = pf;
 const { logn, log2, log10 } = pf;
 const { concat, has, flat, push, reverse, slice, splice, sortBy } = pf;
 const { ends, slen, starts, sub, subIdx, substr, upperCase, lowerCase } = pf;
-const { trim, trimStart, trimEnd } = pf;
+const { trim, trimStart, trimEnd, charCode, codeChar, strIdx } = pf;
 const { getTimeMs, randInt, randNum } = pf;
 const { isNum, len, objKeys, range, toNum } = pf;
 import { doTests } from "./test";
@@ -279,6 +279,7 @@ function exeOp(
     case "vec?":
     case "key?":
     case "func?":
+    case "wild?":
       _boo(
         (op === "null?" && args[0].t === "null") ||
           (op === "num?" && args[0].t === "num") ||
@@ -287,7 +288,8 @@ function exeOp(
           (op === "dict?" && args[0].t === "dict") ||
           (op === "vec?" && args[0].t === "vec") ||
           (op === "key?" && args[0].t === "key") ||
-          (op === "func?" && (args[0].t === "func" || args[0].t === "clo")),
+          (op === "func?" && (args[0].t === "func" || args[0].t === "clo")) ||
+          (op === "wild?" && args[0].t === "wild"),
       );
       return;
     case "has?":
@@ -586,11 +588,11 @@ function exeOp(
       }
       return;
     case "sort": {
-      if (!len(vec(args[0]))) {
+      const src = asArray(args[0]);
+      if (!len(src)) {
         _vec();
         return;
       }
-      const src = asArray(args[0]);
       const mapped: Val[][] = [];
       if (len(args) === 1) {
         push(
@@ -654,7 +656,7 @@ function exeOp(
       return;
     case "join":
       _str(
-        vec(args[0])
+        asArray(args[0])
           .map(val2str)
           .join(len(args) > 1 ? str(args[1]) : " "),
       );
@@ -687,6 +689,20 @@ function exeOp(
           .map((n) => text)
           .join(""),
       );
+      return;
+    }
+    case "char-code": {
+      if (args[0].t === "str") {
+        const n = len(args) > 1 ? num(args[1]) : 0;
+        const s = str(args[0]);
+        if (slen(s) <= n || n < 0) {
+          _nul();
+        } else {
+          _num(charCode(strIdx(s, n)));
+        }
+      } else {
+        _str(codeChar(num(args[0])));
+      }
       return;
     }
     case "time":
@@ -997,6 +1013,15 @@ function exeFunc(
           stack.pop();
         }
         break;
+      case "mat": {
+        const a = stack[len(stack) - 2];
+        if (!isEqual(a, stack.pop()!)) {
+          i += ins.value;
+        } else {
+          stack.pop();
+        }
+        break;
+      }
       case "if":
         if (!asBoo(stack.pop()!)) {
           i += ins.value;

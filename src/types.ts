@@ -2,6 +2,7 @@ export type Val =
   | { t: "vec"; v: Val[] }
   | { t: "str" | "func" | "key" | "ref"; v: string }
   | { t: "null"; v: undefined }
+  | { t: "wild"; v: undefined }
   | { t: "bool"; v: boolean }
   | { t: "num"; v: number }
   | { t: "clo"; v: Func }
@@ -54,7 +55,7 @@ export type Ins = { errCtx: ErrCtx } & (
   | { typ: "var" | "let" | "ref"; value: string }
   | { typ: "exe"; value: number } //Execute last stack value, number of args
   | { typ: "exp"; value: number } //Marks the start of an expression as head for potential partial closures
-  | { typ: "or" | "if" | "jmp" | "loo" | "cat"; value: number } //number of instructions
+  | { typ: "or" | "if" | "jmp" | "loo" | "cat" | "mat"; value: number } //Number of instructions
   | { typ: "ret"; value: boolean } //Return, with value?
   | { typ: "pop"; value: number } //Truncate stack, by number of values
   | { typ: "clo" | "par"; value: [string, Ins[]] } //Closure and partial, text representation and instructions
@@ -131,6 +132,7 @@ export const ops: {
   "dict?": { exactArity: 1, returns: ["bool"] },
   "key?": { exactArity: 1, returns: ["bool"] },
   "func?": { exactArity: 1, returns: ["bool"] },
+  "wild?": { exactArity: 1, returns: ["bool"] },
   rem: { minArity: 2, numeric: true },
   sin: { exactArity: 1, numeric: true },
   cos: { exactArity: 1, numeric: true },
@@ -189,7 +191,12 @@ export const ops: {
     returns: ["vec", "str"],
   },
   reverse: { exactArity: 1, types: [["vec", "str"]], returns: ["vec", "str"] },
-  sort: { minArity: 1, maxArity: 2, types: ["vec"], returns: ["vec"] },
+  sort: {
+    minArity: 1,
+    maxArity: 2,
+    types: [["vec", "dict", "str"]],
+    returns: ["vec"],
+  },
   keys: { exactArity: 1, types: ["dict"] },
   vals: { exactArity: 1, types: ["dict"] },
   do: { minArity: 1 },
@@ -201,7 +208,12 @@ export const ops: {
     returns: ["bool"],
   },
   split: { minArity: 1, maxArity: 2, types: ["str", "str"], returns: ["vec"] },
-  join: { minArity: 1, maxArity: 2, types: ["vec", "str"], returns: ["str"] },
+  join: {
+    minArity: 1,
+    maxArity: 2,
+    types: [["vec", "dict", "str"], "str"],
+    returns: ["str"],
+  },
   "starts-with?": { exactArity: 2, types: ["str", "str"], returns: ["bool"] },
   "ends-with?": { exactArity: 2, types: ["str", "str"], returns: ["bool"] },
   "lower-case": { exactArity: 1, types: ["str"], returns: ["str"] },
@@ -210,6 +222,12 @@ export const ops: {
   "trim-start": { exactArity: 1, types: ["str"], returns: ["str"] },
   "trim-end": { exactArity: 1, types: ["str"], returns: ["str"] },
   "str*": { exactArity: 2, types: ["str", "num"], returns: ["str"] },
+  "char-code": {
+    minArity: 1,
+    maxArity: 2,
+    types: [["str", "num"], "num"],
+    returns: ["str", "num", "null"],
+  },
   time: { exactArity: 0, returns: ["num"] },
   version: { exactArity: 0, returns: ["num"] },
   tests: { minArity: 0, maxArity: 1, types: ["bool"], returns: ["str"] },
@@ -230,6 +248,7 @@ export const typeNames = {
   dict: "dictionary",
   func: "function",
   clo: "closure",
+  wild: "wildcard",
 };
 
 export const assertUnreachable = (_x: never): never => <never>0;
