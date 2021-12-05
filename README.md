@@ -30,13 +30,15 @@
 
 Include https://github.com/insitux/rbxts-Insitux into your roblox-ts project: `npm i @rbxts/insitux`
 
-Exposed are `invoke()` and `invokeFunction()`. Both require a `Ctx` instance, along with a generated source ID.
+Exposed are `invoke()` and `invokeFunction()`. Both require a `Ctx` instance, along with a generated source ID. Also exposed is `addOperation()` to extend Insitux with your own functions easier than `exe` explained below.  
+Further explanation can be found in the docstring of most functions and types like `invoke`, `Ctx`, `symbols`, etc.
 
 ```ts
 export type Ctx = {
-  set: (key: string, val: Val) => string | undefined;
+  set: (key: string, val: Val) => undefined | string;
   get: (key: string) => ValOrErr;
-  exe: (name: string, args: Val[]) => alOrErr;
+  exe: (name: string, args: Val[]) => ValOrErr;
+  print: (str: string, withNewline: boolean) => void;
   env: Env;
   loopBudget: number;
   rangeBudget: number;
@@ -47,10 +49,10 @@ export type Ctx = {
 
 - `set` and `get` should be used to directly write/read values in your game.  
 - `exe` is used to extend Insitux with custom functions. This is called any time
-Insitux fails to dereference an expression head as something internal. For
+Insitux fails to dereference an expression head as something internal or previously defined with `addOperation`. For
 example `(abc 123)`, unless `abc` is an already defined let/var/function it will
 call `exe` with `abc` as `name`, and `[{t: "num" v: 123}]` as `args`.  
-  - Insitux expects you have handled `print` and `print-str`.
+- `print` is called when `print` or `print-str` is used within Insitux
 - `env` persists user defined variables and functions.
 - The budgets set a limit on looping, range creation, function calls and
 explicit recurs. This will vary between games so start with a safe `1000` and
@@ -78,6 +80,19 @@ If anybody could improve this guide please make a PR!
          (fib (- n 2)))))
 
 (fib 13) → 233
+
+
+; Fizzbuzz with match syntax
+(function fizzbuzz n
+  (let rems (for rem [n] [3 5]))
+  (match rems
+    [0 0] "fizzbuzz"
+    [0 _] "fizz"
+    [_ 0] "buzz"
+    n))
+
+(map fizzbuzz (range 10 16))
+→ ["buzz" 11 "fizz" 13 14 "fizzbuzz"]
 
 
 ; Filter for vectors and strings above a certain length
@@ -111,10 +126,21 @@ If anybody could improve this guide please make a PR!
 (palindrome? [2 1 2])     → [2 1 2]
 
 
+; Matrix addition
+(let A [[3  8] [4  6]])
+(let B [[4  0] [1 -9]])
+(map @(map +) A B)
+
+
+; Matrix negation
+(let M [[2 -4] [7 10]])
+(map @(map -) M)
+
+
 ; Clojure's juxt
 (function juxt
   (let funcs args)
-  #(for #(.. %1 %) [args] funcs))
+  #(for ... funcs [args]))
 
 ((juxt + - * /) 10 8)
 → [18 2 80 1.25]
@@ -138,26 +164,18 @@ If anybody could improve this guide please make a PR!
 → {"h" 1, "e" 1, "l" 2, "o" 1}
 
 
-; Clojure's -> analog
-(function ->>
-  (if (= (len args) 1) (return (0 args)))
-  (... recur ((1 args) (0 args)) (sect args 2)))
-(->> (range 10)
-    @(filter odd?)
-    @(map #(* % %))
-    @(reduce +))
-→ 165
-
-
 ; Deduplicate a list recursively
 (function dedupe list -out
   (let out  (or -out [])
        next (if (out (0 list)) [] [(0 list)]))
   (if (empty? list) out
     (recur (sect list) (into out next))))
-;or deduplicate a list via dictionary keys
+;or via dictionary keys
 (function dedupe list
   (keys (.. .. dict (for vec list [0]))))
+;or via reduction
+(function dedupe list
+  (reduce #(if (% %1) % (push % %1)) list []))
 
 (dedupe [1 2 3 3])
 → [1 2 3]
@@ -168,7 +186,7 @@ If anybody could improve this guide please make a PR!
   (let report [(time) (.. . args) (time)])
   (str (1 report) " took " (- (2 report) (0 report)) "ms"))
 
-(measure fib 35) → "9227465 took 45500ms"
+(measure fib 35) → "9227465 took 38003ms"
 
 
 ; Display the Mandelbrot fractal as ASCII
@@ -189,23 +207,60 @@ If anybody could improve this guide please make a PR!
 (mandelbrot 56 32 10)
 
 
+; Generate random strong password
+(-> (fn a b (repeat #(char-code (rand-int a b)) 4))
+   #(map % [97 65 48 33] [123 91 58 48])
+   @(.. .. vec)
+   #(sort % #(rand-int 100))
+   @(.. str))
+
+→ "d$W1iP*tO9'V9(y8"
+
+
 ; Convert nested arrays and dictionaries into HTML
 (function vec->html v
   (if! (vec? v) (return v))
   (let has-attr (dict? (1 v))
        attr (if! has-attr ""
               (map #(str " " (0 %) "=\"" (1 %) "\"") (1 v)))
-       tag (0 v)
+       tag (sect (str (0 v)))
        html (.. str "<" tag attr ">"
               (map vec->html (sect v (if has-attr 2 1)))
               "</" tag ">")))
 
 (vec->html
-  ["div"
-    ["h2" "Hello"]
-    ["p" ".PI is " ["b" (round PI 2)] "."]
-    ["p" "Find more about Insitux on "
-       ["a" {"href" "https://github.com/phunanon/Insitux"}
+  [:div
+    [:h2 "Hello"]
+    [:p ".PI is " [:b (round PI 2)] "."]
+    [:p "Find more about Insitux on "
+       [:a {"href" "https://github.com/phunanon/Insitux"}
           "Github"]]])
 → "<div><h2>Hello</h2><p>.PI is <b>3.14</b>.</p><p>Find more about Insitux on <a href="https://github.com/phunanon/Insitux">Github</a></p></div>"
+
+
+; Neural network for genetic algorithms with two hidden layers
+(function sigmoid (/ 1 (inc (** E (- %)))))
+(function m (< .8 (rand)))
+
+(function make-brain  num-inputs num-outputs num-hidden
+  (let make-neuron #{:bias 0 :weights (repeat 1 %)})
+  [(repeat #(make-neuron num-inputs) num-hidden)
+   (repeat #(make-neuron num-hidden) num-hidden)
+   (repeat #(make-neuron num-hidden) num-outputs)])
+
+(function mutate  brain
+  (let mutate-neuron
+    #{:bias    ((m) (rand -2 2) (:bias %))
+      :weights (map @((m) (rand -1 1)) (:weights %))})
+  (map @(map mutate-neuron) brain))
+
+(function neuron-think  neuron inputs
+  (let weighted (map * (:weights neuron) inputs)
+       average  (/ (.. + weighted) (len inputs)))
+  (sigmoid (+ average (:bias neuron))))
+
+(function think  brain inputs
+  (let thoughts (map #(neuron-think % inputs)   (0 brain))
+       thoughts (map #(neuron-think % thoughts) (1 brain))
+       thoughts (map #(neuron-think % thoughts) (2 brain))))
 ```

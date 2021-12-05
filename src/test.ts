@@ -18,10 +18,6 @@ function set(state: State, key: string, val: Val): string | undefined {
 function exe(state: State, name: string, args: Val[]): ValOrErr {
   const nullVal: Val = { t: "null", v: undefined };
   switch (name) {
-    case "print-str":
-      state.output += args[0].v;
-      break;
-    case "print":
     case "test.function":
       state.output += args[0].v + "\n";
       break;
@@ -275,6 +271,22 @@ const tests: {
     code: `(@((do +) 2) 2)`,
     out: `4`,
   },
+  {
+    name: "Parameterised closure 1",
+    code: `((fn a b (+ a b)) 2 2)`,
+    out: `4`,
+  },
+  {
+    name: "Parameterised closure 2",
+    code: `((fn a b (print-str a b) (+ a b)) 2 2)`,
+    out: `224`,
+  },
+  {
+    name: "Parameterised closure 3",
+    code: `(((fn (fn 1))))`,
+    out: `1`,
+  },
+  { name: "Threading", code: "(-> 1 inc @(+ 10))", out: `12` },
   //Runtime errors
   {
     name: "String instead of number",
@@ -389,6 +401,9 @@ export function doTests(
         get: (key: string) => get(state, key),
         set: (key: string, val: Val) => set(state, key, val),
         exe: (name: string, args: Val[]) => exe(state, name, args),
+        print(str, withNewLine) {
+          state.output += str + (withNewLine ? "\n" : "");
+        },
         env,
         loopBudget: 10000,
         rangeBudget: 1000,
