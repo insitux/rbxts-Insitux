@@ -1,4 +1,4 @@
-export const insituxVersion = 20211202;
+export const insituxVersion = 20220103;
 import { asBoo } from "./checks";
 import { arityCheck, keyOpErr, numOpErr, typeCheck, typeErr } from "./checks";
 import { parse } from "./parse";
@@ -12,7 +12,7 @@ const { getTimeMs, randInt, randNum } = pf;
 const { isNum, len, objKeys, range, toNum } = pf;
 import { doTests } from "./test";
 import { assertUnreachable, InvokeError, InvokeResult } from "./types";
-import { Operation, ExternalHandler } from "./types";
+import { ExternalFunction, ExternalHandler } from "./types";
 import { Ctx, Dict, ErrCtx, Func, Ins, Val, ops, typeNames } from "./types";
 import { asArray, isEqual, num, str, stringify, val2str, vec } from "./val";
 import { dic, dictDrop, dictGet, dictSet, toDict } from "./val";
@@ -46,11 +46,8 @@ function exeOp(
   }
   //Argument type check
   {
-    const violations = typeCheck(
-      op,
-      args.map((a) => [a.t]),
-      errCtx,
-    );
+    const types = args.map((a) => [a.t]);
+    const violations = typeCheck(op, types, errCtx);
     if (violations) {
       return violations;
     }
@@ -58,10 +55,7 @@ function exeOp(
 
   switch (op) {
     case "str":
-      stack.push({
-        t: "str",
-        v: stringify(args),
-      });
+      stack.push({ t: "str", v: stringify(args) });
       return;
     case "print":
     case "print-str":
@@ -71,10 +65,9 @@ function exeOp(
     case "vec":
       _vec(args);
       return;
-    case "dict": {
+    case "dict":
       stack.push(toDict(args));
       return;
-    }
     case "len":
       _num(
         args[0].t === "str"
@@ -202,8 +195,8 @@ function exeOp(
       return;
     case "round":
       if (len(args) === 2) {
-        const x = 10 ** <number>args[1].v;
-        _num(round(<number>args[0].v * x) / x);
+        const x = 10 ** <number>args[0].v;
+        _num(round(<number>args[1].v * x) / x);
       } else {
         _num(round(<number>args[0].v));
       }
@@ -216,13 +209,11 @@ function exeOp(
     case "ceil":
     case "logn":
     case "log2":
-    case "log10":
-      _num(
-        { sin, cos, tan, sqrt, floor, ceil, logn, log2, log10 }[op](
-          num(args[0]),
-        ),
-      );
+    case "log10": {
+      const f = { sin, cos, tan, sqrt, floor, ceil, logn, log2, log10 }[op];
+      _num(f(num(args[0])));
       return;
+    }
     case "and":
       _boo(args.every(asBoo));
       return;
@@ -280,18 +271,14 @@ function exeOp(
     case "key?":
     case "func?":
     case "wild?":
+    case "ext?": {
+      const { t } = args[0];
       _boo(
-        (op === "null?" && args[0].t === "null") ||
-          (op === "num?" && args[0].t === "num") ||
-          (op === "bool?" && args[0].t === "bool") ||
-          (op === "str?" && args[0].t === "str") ||
-          (op === "dict?" && args[0].t === "dict") ||
-          (op === "vec?" && args[0].t === "vec") ||
-          (op === "key?" && args[0].t === "key") ||
-          (op === "func?" && (args[0].t === "func" || args[0].t === "clo")) ||
-          (op === "wild?" && args[0].t === "wild"),
+        (op === "func?" && (t === "func" || t === "clo")) ||
+          substr(op, 0, slen(op) - 1) === t,
       );
       return;
+    }
     case "has?":
       _boo(sub(str(args[0]), str(args[1])));
       return;
@@ -387,8 +374,9 @@ function exeOp(
         return;
       }
 
-      const array = asArray(args.shift()!);
       if (op !== "reduce") {
+        const arrArg = args.shift()!;
+        const array = asArray(arrArg);
         const isRemove = op === "remove",
           isFind = op === "find",
           isCount = op === "count";
@@ -419,9 +407,24 @@ function exeOp(
             _nul();
             return;
         }
-        _vec(filtered);
+        if (arrArg.t === "str") {
+          _str(filtered.map((v) => val2str(v)).join(""));
+        } else if (arrArg.t === "dict") {
+          stack.push(toDict(flat(filtered.map((v) => <Val[]>v.v))));
+        } else {
+          _vec(filtered);
+        }
         return;
       }
+      const arrayVal = args.pop()!;
+      if (!has(["vec", "dict", "str"], arrayVal.t)) {
+        return tErr(
+          `must reduce either: string, vector, dictionary, not ${
+            typeNames[arrayVal.t]
+          }`,
+        );
+      }
+      const array = asArray(arrayVal);
 
       if (!len(array)) {
         if (len(args)) {
@@ -474,8 +477,8 @@ function exeOp(
     }
     case "->": {
       stack.push(args.shift()!);
-      for (let a = 0, b = len(args); a < b; ++a) {
-        const errors = getExe(ctx, args[a], errCtx)([stack.pop()!]);
+      for (let i = 0, lim = len(args); i < lim; ++i) {
+        const errors = getExe(ctx, args[i], errCtx)([stack.pop()!]);
         if (errors) {
           return errors;
         }
@@ -659,21 +662,17 @@ function exeOp(
       return;
     case "split":
       _vec(
-        str(args[0])
-          .split(len(args) > 1 ? str(args[1]) : " ")
+        str(args[len(args) - 1])
+          .split(len(args) - 1 ? str(args[0]) : " ")
           .map((v) => <Val>{ t: "str", v }),
       );
       return;
     case "join":
-      _str(
-        asArray(args[0])
-          .map(val2str)
-          .join(len(args) > 1 ? str(args[1]) : " "),
-      );
+      _str(asArray(args[1]).map(val2str).join(str(args[0])));
       return;
-    case "starts-with?":
-    case "ends-with?":
-      _boo((op === "starts-with?" ? starts : ends)(str(args[0]), str(args[1])));
+    case "starts?":
+    case "ends?":
+      _boo((op === "starts?" ? starts : ends)(str(args[1]), str(args[0])));
       return;
     case "upper-case":
     case "lower-case":
@@ -730,8 +729,8 @@ function exeOp(
     case "eval": {
       delete ctx.env.funcs["entry"];
       const sLen = len(stack);
-      const sourceId = `${errCtx.sourceId} eval`;
-      const errors = parseAndExe(ctx, str(args[0]), sourceId);
+      const invokeId = `${errCtx.invokeId} eval`;
+      const errors = parseAndExe(ctx, str(args[0]), invokeId);
       if (errors) {
         return [
           { e: "Eval", m: "error within evaluated code", errCtx },
@@ -757,19 +756,19 @@ function exeOp(
   return [{ e: "Unexpected", m: "operation doesn't exist", errCtx }];
 }
 
+const monoArityError = (t: Val["t"], errCtx: ErrCtx) => [
+  {
+    e: "Arity",
+    m: `${typeNames[t]} as op requires one sole argument`,
+    errCtx,
+  },
+];
 function getExe(
   ctx: Ctx,
   op: Val,
   errCtx: ErrCtx,
   checkArity = true,
 ): (params: Val[]) => InvokeError[] | undefined {
-  const monoArityError = [
-    {
-      e: "Arity",
-      m: `${typeNames[op.t]} as op requires one sole argument`,
-      errCtx,
-    },
-  ];
   if (op.t === "str" || op.t === "func") {
     const name = op.v;
     if (ops[name]) {
@@ -796,7 +795,7 @@ function getExe(
     if (starts(name, "$")) {
       return (params: Val[]) => {
         if (!len(params)) {
-          return monoArityError;
+          return monoArityError(op.t, errCtx);
         }
         const err = ctx.set(substr(name, 1), params[0]);
         stack.push(params[0]);
@@ -816,7 +815,7 @@ function getExe(
   } else if (op.t === "key") {
     return (params: Val[]) => {
       if (!len(params)) {
-        return monoArityError;
+        return monoArityError(op.t, errCtx);
       }
       if (params[0].t === "dict") {
         stack.push(dictGet(dic(params[0]), op));
@@ -832,17 +831,18 @@ function getExe(
     const n = floor(op.v);
     return (params: Val[]) => {
       if (!len(params)) {
-        return monoArityError;
+        return monoArityError(op.t, errCtx);
       }
       const a = params[0];
       if (a.t !== "str" && a.t !== "vec" && a.t !== "dict") {
         return numOpErr(errCtx, [a.t]);
       }
-      const arr = asArray(a);
-      if (abs(n) >= len(arr)) {
+      const arr = asArray(a),
+        alen = len(arr);
+      if ((n >= 0 && n >= alen) || (n < 0 && -n > alen)) {
         _nul();
       } else if (n < 0) {
-        stack.push(arr[len(arr) + n]);
+        stack.push(arr[alen + n]);
       } else {
         stack.push(arr[n]);
       }
@@ -852,7 +852,7 @@ function getExe(
     const { v } = op;
     return (params: Val[]) => {
       if (!len(params)) {
-        return monoArityError;
+        return monoArityError(op.t, errCtx);
       }
       const found = v.find((val) => isEqual(val, params[0]));
       if (found) {
@@ -871,11 +871,7 @@ function getExe(
         _dic(dictSet(dict, params[0], params[1]));
       } else {
         return [
-          {
-            e: "Arity",
-            m: "dictionary as operation takes one or two arguments only",
-            errCtx,
-          },
+          { e: "Arity", m: "provide 1 or 2 arguments for dictionary", errCtx },
         ];
       }
       return;
@@ -885,11 +881,7 @@ function getExe(
     return (params: Val[]) => {
       if (!len(params) || len(params) > 2) {
         return [
-          {
-            e: "Arity",
-            m: "boolean as operation takes one or two arguments only",
-            errCtx,
-          },
+          { e: "Arity", m: "provide 1 or 2 arguments for boolean", errCtx },
         ];
       }
       stack.push(
@@ -917,6 +909,22 @@ function errorsToDict(errors: InvokeError[]) {
     dict = newKey(dict, ":col", { t: "num", v: errCtx.col });
     return <Val>{ t: "dict", v: dict };
   });
+}
+
+function destruct(args: Val[], shape: number[]): Val {
+  let arr: Val[] = args;
+  for (let a = 0, b = len(shape) - 1; a < b; ++a) {
+    const val = arr[shape[a]];
+    if (val.t === "vec") {
+      arr = val.v;
+    } else if (val.t === "str" && a + 1 === b && shape[a + 1] < slen(val.v)) {
+      return { t: "str", v: strIdx(val.v, shape[a + 1]) };
+    } else {
+      return { t: "null", v: undefined };
+    }
+  }
+  const pos = shape[len(shape) - 1];
+  return pos >= len(arr) ? { t: "null", v: undefined } : arr[pos];
 }
 
 function exeFunc(
@@ -955,76 +963,91 @@ function exeFunc(
       case "let":
         lets[len(lets) - 1][ins.value] = stack[len(stack) - 1];
         break;
+      case "dle":
+      case "dva": {
+        const val = stack.pop()!;
+        let last: Val | undefined;
+        ins.value.forEach(({ name, position }) => {
+          if (ins.typ === "dva") {
+            last = ctx.env.vars[name] = destruct([val], position);
+          } else {
+            last = lets[len(lets) - 1][name] = destruct([val], position);
+          }
+        });
+        stack.push(last!);
+        break;
+      }
       case "npa":
-      case "upa":
-        {
-          const paramIdx = ins.value;
-          if (paramIdx === -1) {
-            _vec(args);
-          } else if (len(args) <= paramIdx) {
-            _nul();
-          } else {
-            stack.push(args[paramIdx]);
-          }
+      case "upa": {
+        const paramIdx = ins.value;
+        if (paramIdx === -1) {
+          _vec(args);
+        } else if (len(args) <= paramIdx) {
+          _nul();
+        } else {
+          stack.push(args[paramIdx]);
         }
         break;
-      case "ref":
-        {
-          const name = ins.value;
-          if (ops[name]) {
-            _fun(name);
-          } else if (starts(name, "$")) {
-            const valAndErr = ctx.get(substr(name, 1));
-            if (valAndErr.kind === "err") {
-              return [{ e: "External", m: valAndErr.err, errCtx }];
-            }
-            stack.push(valAndErr.value);
-          } else if (name in ctx.env.vars) {
-            stack.push(ctx.env.vars[name]);
-          } else if (name in lets[len(lets) - 1]) {
-            stack.push(lets[len(lets) - 1][name]);
-          } else if (name in ctx.env.funcs) {
-            _fun(name);
-          } else {
-            return [{ e: "Reference", m: `"${name}" did not exist`, errCtx }];
+      }
+      case "dpa":
+        stack.push(destruct(args, ins.value));
+        break;
+      case "ref": {
+        const name = ins.value;
+        if (ops[name]) {
+          _fun(name);
+        } else if (starts(name, "$")) {
+          const valAndErr = ctx.get(substr(name, 1));
+          if (valAndErr.kind === "err") {
+            return [{ e: "External", m: valAndErr.err, errCtx }];
           }
+          stack.push(valAndErr.value);
+        } else if (name in ctx.env.vars) {
+          stack.push(ctx.env.vars[name]);
+        } else if (name in lets[len(lets) - 1]) {
+          stack.push(lets[len(lets) - 1][name]);
+        } else if (name in ctx.env.funcs) {
+          _fun(name);
+        } else {
+          return [{ e: "Reference", m: `"${name}" did not exist`, errCtx }];
         }
         break;
-      case "exe":
-        {
-          const closure = getExe(ctx, stack.pop()!, errCtx, false);
-          const nArgs = ins.value;
-          const params = splice(stack, len(stack) - nArgs, nArgs);
-          const errors = closure(params);
-          if (errors) {
-            //Find next catch statement
-            const nextCat = slice(func.ins, i).findIndex(
-              (ins) => ins.typ === "cat",
-            );
-            if (nextCat !== -1) {
-              i += nextCat;
-              lets[len(lets) - 1]["errors"] = {
-                t: "vec",
-                v: errorsToDict(errors),
-              };
-              break;
-            }
-            return errors;
-          }
-          if (recurArgs) {
-            lets[len(lets) - 1] = {};
-            i = -1;
-            const nArgs = ins.value;
-            args = recurArgs;
-            recurArgs = undefined;
-            --ctx.recurBudget;
-            if (!ctx.recurBudget) {
-              return [{ e: "Budget", m: `recurred too many times`, errCtx }];
-            }
+      }
+      case "exa":
+      case "exe": {
+        const closure = getExe(ctx, stack.pop()!, errCtx, ins.typ === "exa");
+        const nArgs = ins.value;
+        const params = splice(stack, len(stack) - nArgs, nArgs);
+        const errors = closure(params);
+        if (errors) {
+          //Find next catch statement
+          const nextCat = slice(func.ins, i).findIndex(
+            (ins) => ins.typ === "cat",
+          );
+          if (nextCat !== -1) {
+            i += nextCat;
+            lets[len(lets) - 1]["errors"] = {
+              t: "vec",
+              v: errorsToDict(errors),
+            };
             break;
           }
+          return errors;
+        }
+        if (recurArgs) {
+          lets[len(lets) - 1] = {};
+          i = -1;
+          const nArgs = ins.value;
+          args = recurArgs;
+          recurArgs = undefined;
+          --ctx.recurBudget;
+          if (!ctx.recurBudget) {
+            return [{ e: "Budget", m: `recurred too many times`, errCtx }];
+          }
+          break;
         }
         break;
+      }
       case "or":
         if (asBoo(stack[len(stack) - 1])) {
           i += ins.value;
@@ -1066,69 +1089,35 @@ function exeFunc(
         i = lim;
         break;
       case "clo":
-      case "par":
-        {
-          const name = ins.value[0];
-          let cins = ins.value[1];
-          const isCapture = ({ typ, value }: Ins, i: number) =>
-            (typ === "ref" &&
-              !cins.find((i) => i.typ === "let" && i.value === value)) ||
-            typ === "npa" ||
-            (typ === "val" && i + 1 !== len(cins) && cins[i + 1].typ === "exe");
-          const derefFunc: Func = {
-            name: "",
-            ins: cins
-              .map((ins, i) => {
-                if (i + 1 === len(cins)) {
-                  return ins;
-                }
-                const possibleLet =
-                  ins.typ === "val" &&
-                  ins.value.t === "str" &&
-                  cins[i + 1].typ === "exe" &&
-                  lets[len(lets) - 1][ins.value.v];
-                return possibleLet
-                  ? <Ins>{ typ: "val", value: possibleLet }
-                  : ins;
-              })
-              .filter(isCapture),
-          };
-          const errors = exeFunc(ctx, derefFunc, args, true);
+      case "par": {
+        const { name, captured, captureIns } = ins.value;
+        let { closureIns: cins } = ins.value;
+        const newCins: Ins[] = [];
+        if (!len(captureIns)) {
+          push(newCins, cins);
+        } else {
+          cins = cins.map((ins, i) => {
+            const decl =
+              ins.typ === "val" &&
+              ins.value.t === "str" &&
+              (lets[len(lets) - 1][ins.value.v] ?? ctx.env.vars[ins.value.v]);
+            captured[i] = decl ? false : captured[i];
+            return decl ? <Ins>{ typ: "val", value: decl } : ins;
+          });
+          const errors = exeFunc(ctx, { ins: captureIns }, args, true);
           if (errors) {
             return errors;
           }
-          const numIns = len(derefFunc.ins);
+          const numIns = len(captureIns);
           const captures = splice(stack, len(stack) - numIns, numIns);
-          cins = cins.map((ins, i) =>
-            isCapture(ins, i)
-              ? <Ins>{ typ: "val", value: captures.shift()!, errCtx }
-              : ins,
-          );
-          //Rewrite partial closure to #(... func [args] args)
-          if (ins.typ === "par") {
-            const { value: exeNumArgs, errCtx } = cins.pop()!;
-            //If has expression as head
-            if (len(cins) > 0 && cins[len(cins) - 1].typ === "exe") {
-              const headStartIdx = cins.findIndex((i) => i.typ === "exp");
-              const head = splice(cins, headStartIdx, len(cins) - headStartIdx);
-              push(head, cins);
-              cins = head;
-            } else {
-              cins.unshift(cins.pop()!);
-            }
-            cins.push({ typ: "upa", value: -1, errCtx });
-            cins.push({
-              typ: "val",
-              value: <Val>{ t: "str", v: "..." },
-              errCtx,
-            });
-            cins.push({ typ: "exe", value: <number>exeNumArgs + 2, errCtx });
+          const cap = (value: Val) => <Ins>{ typ: "val", value, errCtx };
+          for (let i = 0, c = 0; i < len(captured); ++i) {
+            newCins.push(captured[i] ? cap(captures[c++]) : cins[i]);
           }
-          stack.push(<Val>{ t: "clo", v: <Func>{ name, ins: cins } });
         }
+        stack.push(<Val>{ t: "clo", v: <Func>{ name, ins: newCins } });
         break;
-      case "exp":
-        break;
+      }
       default:
         assertUnreachable(ins);
     }
@@ -1143,9 +1132,9 @@ function exeFunc(
 function parseAndExe(
   ctx: Ctx,
   code: string,
-  sourceId: string,
+  invokeId: string,
 ): InvokeError[] | undefined {
-  const parsed = parse(code, sourceId);
+  const parsed = parse(code, invokeId);
   if (len(parsed.errors)) {
     return parsed.errors;
   }
@@ -1156,26 +1145,48 @@ function parseAndExe(
   return exeFunc(ctx, ctx.env.funcs["entry"], []);
 }
 
-/**
- * Registers a new operation in Insitux, usable by all contexts.
- */
-export function addOperation(
-  name: string,
-  definition: Operation,
-  handler: ExternalHandler,
-) {
-  if (ops[name] && !externalOps[name]) {
-    throw "Redefining internal operations is disallowed.";
-  }
-  ops[name] = { ...definition, external: true };
-  externalOps[name] = handler;
+function ingestExternalOperations(functions: ExternalFunction[]) {
+  functions.forEach(({ name, definition, handler }) => {
+    if (ops[name] && !externalOps[name]) {
+      throw "Redefining internal operations is disallowed.";
+    }
+    ops[name] = { ...definition, external: true };
+    externalOps[name] = handler;
+  });
+}
+
+function removeExternalOperations(functions: ExternalFunction[]) {
+  functions.forEach(({ name }) => {
+    delete ops[name];
+    delete externalOps[name];
+  });
+}
+
+function innerInvoke(
+  ctx: Ctx,
+  closure: () => InvokeError[] | undefined,
+): InvokeResult {
+  const { callBudget, loopBudget, recurBudget, rangeBudget } = ctx;
+  ingestExternalOperations(ctx.functions);
+  const errors = closure();
+  removeExternalOperations(ctx.functions);
+  [ctx.callBudget, ctx.recurBudget] = [callBudget, recurBudget];
+  [ctx.loopBudget, ctx.rangeBudget] = [loopBudget, rangeBudget];
+  delete ctx.env.funcs["entry"];
+  const value = stack.pop();
+  [stack, lets] = [[], []];
+  return errors
+    ? { kind: "errors", errors }
+    : value
+    ? { kind: "val", value }
+    : { kind: "empty" };
 }
 
 /**
  * Parses and executes the given code.
  * @param ctx An environment context you retain.
  * @param code The code to parse and execute.
- * @param sourceId A unique ID used in immediate or future invocation errors.
+ * @param invokeId A unique ID referenced in invocation errors.
  * @param printResult Automatically print the final value of this invocation?
  * @returns Invocation errors caused during execution of the code,
  * or the final value of the invocation.
@@ -1183,24 +1194,14 @@ export function addOperation(
 export function invoke(
   ctx: Ctx,
   code: string,
-  sourceId: string,
+  invokeId: string,
   printResult = false,
 ): InvokeResult {
-  const { callBudget, loopBudget, recurBudget, rangeBudget } = ctx;
-  const errors = parseAndExe(ctx, code, sourceId);
-  [ctx.callBudget, ctx.recurBudget] = [callBudget, recurBudget];
-  [ctx.loopBudget, ctx.rangeBudget] = [loopBudget, rangeBudget];
-  delete ctx.env.funcs["entry"];
-  const value = stack.pop();
-  [stack, lets] = [[], []];
-  if (printResult && !errors && value) {
-    ctx.print(val2str(value), true);
+  const result = innerInvoke(ctx, () => parseAndExe(ctx, code, invokeId));
+  if (printResult && result.kind === "val") {
+    ctx.print(val2str(result.value), true);
   }
-  return errors
-    ? { kind: "errors", errors }
-    : value
-    ? { kind: "val", value }
-    : { kind: "empty" };
+  return result;
 }
 
 /**
@@ -1217,20 +1218,10 @@ export function invokeFunction(
   funcName: string,
   params: Val[],
 ): InvokeResult | undefined {
-  const { callBudget, loopBudget, recurBudget, rangeBudget } = ctx;
   if (!(funcName in ctx.env.funcs)) {
     return;
   }
-  const errors = exeFunc(ctx, ctx.env.funcs[funcName], params);
-  [ctx.callBudget, ctx.recurBudget] = [callBudget, recurBudget];
-  [ctx.loopBudget, ctx.rangeBudget] = [loopBudget, rangeBudget];
-  const value = stack.pop()!;
-  [stack, lets] = [[], []];
-  return errors
-    ? { kind: "errors", errors }
-    : value
-    ? { kind: "val", value }
-    : { kind: "empty" };
+  return innerInvoke(ctx, () => exeFunc(ctx, ctx.env.funcs[funcName], params));
 }
 
 /**
@@ -1240,7 +1231,9 @@ export function invokeFunction(
  * (optionally) syntax, constants, and user-defined functions.
  */
 export function symbols(ctx: Ctx, alsoSyntax = true): string[] {
-  let syms = alsoSyntax ? ["function", "let", "var", "if", "if!", "while"] : [];
+  let syms = alsoSyntax
+    ? ["function", "let", "var", "if", "if!", "when", "while", "match", "catch"]
+    : [];
   push(syms, ["args", "PI", "E"]);
   syms = concat(syms, objKeys(ops));
   syms = concat(syms, objKeys(ctx.env.funcs));

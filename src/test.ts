@@ -1,11 +1,11 @@
-import { concat, getTimeMs, len, padEnd, trim } from "./poly-fills";
+import { concat, round, getTimeMs, len, padEnd, trim } from "./poly-fills";
 import { Ctx, Env, Val, ValOrErr, InvokeResult } from "./types";
 
 type State = { dict: Map<string, Val>; output: string };
 
 function get(state: State, key: string): ValOrErr {
   if (!state.dict.has(key)) {
-    return { kind: "err", err: `"${key} not found.` };
+    return { kind: "err", err: `"${key}" not found.` };
   }
   return { kind: "val", value: state.dict.get(key)! };
 }
@@ -22,7 +22,7 @@ function exe(state: State, name: string, args: Val[]): ValOrErr {
       state.output += args[0].v + "\n";
       break;
     default:
-      return { kind: "err", err: `operation ${name} does not exist` };
+      return { kind: "err", err: `operation "${name}" does not exist` };
   }
   return { kind: "val", value: nullVal };
 }
@@ -60,12 +60,12 @@ const tests: {
   { name: "Cond number head", code: `((if false 1 2) [:a :b :c])`, out: `:c` },
   {
     name: "and & short-circuit",
-    code: `[(and true (if true null 1) true) (and 1 2 3)]`,
+    code: `[(and true (if true null 1) (print "hi")) (and 1 2 3)]`,
     out: `[false true]`,
   },
   {
     name: "or & short-circuit",
-    code: `[(or true (print "hello") 1) (or false (print-str "-> ") 1)]`,
+    code: `[(or true (print "hi") 1) (or false (print-str "-> ") 1)]`,
     out: `-> [true 1]`,
   },
   { name: "String retrieve", code: `(2 "Hello")`, out: `l` },
@@ -113,7 +113,7 @@ const tests: {
   { name: "Boolean select", code: `[(true 1 2) (false 1)]`, out: `[1 null]` },
   {
     name: "Sum vector of numbers",
-    code: `[(reduce + [1 2 3]) (reduce + [1 2 3] 3)]`,
+    code: `[(reduce + [1 2 3]) (reduce + 3 [1 2 3])]`,
     out: `[6 9]`,
   },
   {
@@ -282,9 +282,37 @@ const tests: {
     out: `224`,
   },
   {
-    name: "Parameterised closure 3",
-    code: `(((fn (fn 1))))`,
-    out: `1`,
+    name: "Closure with mixed lets",
+    code: `(let a + c 5 d 10)
+           (let closure (fn b (let d 1) (a b c d)))
+           (let a - c 4 d 11)
+           (closure 1)`,
+    out: `7`,
+  },
+  {
+    name: "Destructure var",
+    code: `(var [x [y]] [1 [2]]) [y x]`,
+    out: `[2 1]`,
+  },
+  {
+    name: "Destructure string",
+    code: `(let [a b c] "hello") [a b c]`,
+    out: `["h" "e" "l"]`,
+  },
+  {
+    name: "Destructure function",
+    code: `(function f a [[b c] d] e [e d c b a]) (f 0 [[1 2] 3] 4)`,
+    out: `[4 3 2 1 0]`,
+  },
+  {
+    name: "Destructuring closure",
+    code: `(let f (fn a [b [c]] d [d c b a])) (f 0 [1 [2]] 3)`,
+    out: `[3 2 1 0]`,
+  },
+  {
+    name: "Destructuring fn decoy",
+    code: `(let f (fn a [a [a]])) (f 0)`,
+    out: `[0 [0]]`,
   },
   { name: "Threading", code: "(-> 1 inc @(+ 10))", out: `12` },
   //Runtime errors
@@ -312,6 +340,11 @@ const tests: {
     err: ["Budget"],
   },
   { name: "Range budget", code: `(range 10000)`, err: ["Budget"] },
+  {
+    name: "Head exe arity check",
+    code: `(((fn +)) 1)`,
+    err: ["Arity"],
+  },
   //Complex functions
   {
     name: "Fibonacci 13",
@@ -335,7 +368,7 @@ const tests: {
   {
     name: "frequencies",
     code: `(function frequencies list
-             (reduce #(push % %1 (inc (or (% %1) 0))) list {}))
+             (reduce #(push % %1 (inc (or (% %1) 0))) {} list))
            (frequencies "12121212")`,
     out: `{"1" 4, "2" 4}`,
   },
@@ -359,7 +392,7 @@ const tests: {
   { name: "Function without name", code: `(function (+))`, err: ["Parse"] },
   { name: "Function without body", code: `(function func)`, err: ["Parse"] },
   { name: "Variable not symbol", code: `(var 1 2)`, err: ["Parse"] },
-  //Parser type-errors
+  //Parser type and arity errors
   { name: "Parser type error 1", code: `(function f (+ 1 :a))`, err: ["Type"] },
   {
     name: "Parser type error 2",
@@ -371,13 +404,14 @@ const tests: {
     code: `(function f (if true (into 2 {}) (+ 2 2)))`,
     err: ["Type"],
   },
+  { name: "Parser arity error 1", code: `(abs)`, err: ["Parse"] },
 ];
 
 export function doTests(
   invoke: (
     ctx: Ctx,
     code: string,
-    sourceId: string,
+    invokeId: string,
     print: boolean,
   ) => InvokeResult,
   terse = true,
@@ -400,10 +434,11 @@ export function doTests(
       {
         get: (key: string) => get(state, key),
         set: (key: string, val: Val) => set(state, key, val),
-        exe: (name: string, args: Val[]) => exe(state, name, args),
-        print(str, withNewLine) {
+        print: (str, withNewLine) => {
           state.output += str + (withNewLine ? "\n" : "");
         },
+        exe: (name: string, args: Val[]) => exe(state, name, args),
+        functions: [],
         env,
         loopBudget: 10000,
         rangeBudget: 1000,
@@ -411,7 +446,7 @@ export function doTests(
         recurBudget: 10000,
       },
       code,
-      "testing",
+      code,
       true,
     );
     const errors = valOrErrs.kind === "errors" ? valOrErrs.errors : [];
@@ -421,8 +456,8 @@ export function doTests(
     const [tNum, tName, tElapsed, tOutput, tErrors] = [
       padEnd(`${t + 1}`, 3),
       padEnd(name, 24),
-      padEnd(`${elapsedMs}ms`, 6),
-      okOut || out + "\t=/=\t" + trim(state.output),
+      padEnd(`${round(elapsedMs)}ms`, 6),
+      okOut || out + "\t!=\t" + trim(state.output),
       okErr ||
         errors.map(
           ({ e, m, errCtx: { line, col } }) => `${e} ${line}:${col}: ${m}`,
@@ -439,6 +474,6 @@ export function doTests(
   const numPassed = len(results.filter(({ okOut, okErr }) => okOut && okErr));
   return concat(
     results.filter((r) => !terse || !r.okOut || !r.okErr).map((r) => r.display),
-    [`---- ${numPassed}/${len(results)} tests passed in ${totalMs}ms.`],
+    [`---- ${numPassed}/${len(results)} tests passed in ${round(totalMs)}ms.`],
   );
 }

@@ -6,9 +6,10 @@ export type Val =
   | { t: "bool"; v: boolean }
   | { t: "num"; v: number }
   | { t: "clo"; v: Func }
-  | { t: "dict"; v: Dict };
+  | { t: "dict"; v: Dict }
+  | { t: "ext"; v: unknown };
 
-export type ErrCtx = { sourceId: string; line: number; col: number };
+export type ErrCtx = { invokeId: string; line: number; col: number };
 export type InvokeError = { e: string; m: string; errCtx: ErrCtx };
 export type ValOrErr =
   | { kind: "val"; value: Val }
@@ -29,7 +30,7 @@ export type Dict = {
 };
 
 export type Func = {
-  name: string;
+  name?: string;
   ins: Ins[];
 };
 export type Funcs = { [key: string]: Func };
@@ -45,11 +46,13 @@ export type Ctx = {
   /** Called to retrieve an external variable,
    * returning the value or an error. */
   get: (key: string) => ValOrErr;
-  /** Called when Insitux cannot find a function and assumes it is external.
-   * You should return an error if unknown externally too. */
-  exe: (name: string, args: Val[]) => ValOrErr;
   /** Called to print data out of Insitux. */
   print: (str: string, withNewline: boolean) => void;
+  /** Extra function definitions to make available within this invocation */
+  functions: ExternalFunction[];
+  /** Called when Insitux cannot find a function definition otherwise.
+   * You should return an error if unknown externally too. */
+  exe: (name: string, args: Val[]) => ValOrErr;
   /** Function and variable definitions, retained by you for each invocation. */
   env: Env;
   /** The number of loops an invocation is permitted. */
@@ -63,16 +66,34 @@ export type Ctx = {
   recurBudget: number;
 };
 
+export const defaultCtx = {
+  env: { funcs: {}, vars: {} },
+  loopBudget: 1e7,
+  rangeBudget: 1e6,
+  callBudget: 1e8,
+  recurBudget: 1e4,
+};
+
+export type ParamsShape = { name: string; position: number[] }[];
+export type Closure = {
+  name: string;
+  closureIns: Ins[];
+  captured: boolean[];
+  captureIns: Ins[];
+};
+
 export type Ins = { errCtx: ErrCtx } & (
   | { typ: "val"; value: Val }
   | { typ: "npa" | "upa"; value: number } //Named and Unnamed parameters
+  | { typ: "dpa"; value: number[] } //Destructuring parameters
   | { typ: "var" | "let" | "ref"; value: string }
+  | { typ: "dva" | "dle"; value: ParamsShape } //Destructuring var/let
   | { typ: "exe"; value: number } //Execute last stack value, number of args
-  | { typ: "exp"; value: number } //Marks the start of an expression as head for potential partial closures
+  | { typ: "exa"; value: number } //Execute last stack value, number of args, with arity check
   | { typ: "or" | "if" | "jmp" | "loo" | "cat" | "mat"; value: number } //Number of instructions
   | { typ: "ret"; value: boolean } //Return, with value?
   | { typ: "pop"; value: number } //Truncate stack, by number of values
-  | { typ: "clo" | "par"; value: [string, Ins[]] } //Closure and partial, text representation and instructions
+  | { typ: "clo" | "par"; value: Closure } //Closure and partial, text representation and instructions
 );
 
 /** Definition of an operation in Insitux,
@@ -87,6 +108,11 @@ export type Operation = {
   returns?: Val["t"][];
 };
 export type ExternalHandler = (params: Val[]) => ValOrErr;
+export type ExternalFunction = {
+  name: string;
+  definition: Operation;
+  handler: ExternalHandler;
+};
 
 export const ops: {
   [name: string]: Operation & { external?: boolean };
@@ -153,6 +179,7 @@ export const ops: {
   "key?": { exactArity: 1, returns: ["bool"] },
   "func?": { exactArity: 1, returns: ["bool"] },
   "wild?": { exactArity: 1, returns: ["bool"] },
+  "ext?": { exactArity: 1, returns: ["bool"] },
   rem: { minArity: 2, numeric: true },
   sin: { exactArity: 1, numeric: true },
   cos: { exactArity: 1, numeric: true },
@@ -170,16 +197,16 @@ export const ops: {
   idx: { minArity: 2, maxArity: 3, params: [["str", "vec"]], returns: ["num"] },
   map: { minArity: 2, returns: ["vec"] },
   for: { minArity: 2, returns: ["vec"] },
-  reduce: { minArity: 2, maxArity: 3, params: [[], ["vec", "dict", "str"]] },
+  reduce: { minArity: 2, maxArity: 3 },
   filter: {
     minArity: 2,
     params: [[], ["vec", "dict", "str"]],
-    returns: ["vec"],
+    returns: ["vec", "str", "dict"],
   },
   remove: {
     minArity: 2,
     params: [[], ["vec", "dict", "str"]],
-    returns: ["vec"],
+    returns: ["vec", "str", "dict"],
   },
   find: { minArity: 2, params: [[], ["vec", "dict", "str"]] },
   count: {
@@ -234,13 +261,12 @@ export const ops: {
   },
   split: { minArity: 1, maxArity: 2, params: ["str", "str"], returns: ["vec"] },
   join: {
-    minArity: 1,
-    maxArity: 2,
-    params: [["vec", "dict", "str"], "str"],
+    exactArity: 2,
+    params: ["str", ["vec", "dict", "str"]],
     returns: ["str"],
   },
-  "starts-with?": { exactArity: 2, params: ["str", "str"], returns: ["bool"] },
-  "ends-with?": { exactArity: 2, params: ["str", "str"], returns: ["bool"] },
+  "starts?": { exactArity: 2, params: ["str", "str"], returns: ["bool"] },
+  "ends?": { exactArity: 2, params: ["str", "str"], returns: ["bool"] },
   "lower-case": { exactArity: 1, params: ["str"], returns: ["str"] },
   "upper-case": { exactArity: 1, params: ["str"], returns: ["str"] },
   trim: { exactArity: 1, params: ["str"], returns: ["str"] },
@@ -274,6 +300,7 @@ export const typeNames = {
   func: "function",
   clo: "closure",
   wild: "wildcard",
+  ext: "external",
 };
 
 export const assertUnreachable = (_x: never): never => <never>0;

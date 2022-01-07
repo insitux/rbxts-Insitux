@@ -1,6 +1,6 @@
 {
   "name": "@rbxts/insitux",
-  "version": "21.12.02",
+  "version": "22.01.03.1",
   "description": "Extensible s-expression scripting language enabling players to safely mod Roblox games themselves.",
   "main": "out/init.lua",
   "scripts": {
@@ -38,7 +38,7 @@
     "eslint-plugin-prettier": "^4.0.0",
     "eslint-plugin-roblox-ts": "^0.0.31",
     "prettier": "^2.4.1",
-    "typescript": "^4.4.3"
+    "typescript": "^4.5.4"
   },
   "dependencies": {
     "@rbxts/t": "^2.2.1"
