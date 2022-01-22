@@ -123,24 +123,7 @@ export const push = <T>(arr: T[], add: T[]) => {
   add.forEach((element) => arr.push(element));
 };
 
-export const subIdx = (str: string, subStr: string) => {
-  const sLen = slen(subStr);
-  let a = -1;
-  let n = 0;
-  for (let i = 0, lim = slen(str); i < lim; ++i) {
-    if (strIdx(str, i) === strIdx(subStr, n)) {
-      a = a === -1 ? i : a;
-      ++n;
-      if (n === sLen) {
-        return a;
-      }
-    } else {
-      a = -1;
-      n = 0;
-    }
-  }
-  return -1;
-};
+export const subIdx = (a: string, b: string) => string.find(a, b)[0] || -1;
 
 export const range = (len: number) => {
   const res: number[] = [];
@@ -169,6 +152,12 @@ export const cos = math.cos;
 export const ceil = math.ceil;
 export const abs = math.abs;
 export const sign = math.sign;
+export const sinh = math.sinh;
+export const cosh = math.cosh;
+export const tanh = math.tanh;
+export const asin = math.asin;
+export const acos = math.acos;
+export const atan = math.atan;
 export const pi = math.pi;
 
 export const isArray = (x: unknown): x is unknown[] => t.array(t.any)(x);
