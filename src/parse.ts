@@ -28,8 +28,13 @@ const symAt = (node: Node, pos = 0) => {
   const arg = node[pos];
   return (isToken(arg) && has(["sym", "str"], arg.typ) && arg.text) || "";
 };
-const node2str = (nodes: Node[]): string =>
-  nodes.map((n) => (isToken(n) ? n.text : `(${node2str(n)})`)).join(" ");
+const token2str = ({ typ, text }: Token): string =>
+  typ === "str" ? `"${text}"` : text;
+function node2str(nodes: Node[]): string {
+  return nodes
+    .map((n) => (isToken(n) ? token2str(n) : `(${node2str(n)})`))
+    .join(" ");
+}
 
 export function tokenise(
   code: string,
@@ -281,11 +286,9 @@ function parseForm(
     } else if (op === "catch") {
       if (len(nodes) < 2) {
         return err("provide at least 2 arguments");
-      } else if (isToken(nodes[0])) {
-        return err("argument 1 must be expression");
       }
-      const body = nodeParser(nodes[0]);
-      const when = flat(slice(nodes, 1).map(nodeParser));
+      const when = nodeParser(nodes.pop()!);
+      const body = flat(nodes.map(nodeParser));
       return [...body, { typ: "cat", value: len(when), errCtx }, ...when];
     } else if (op === "and" || op === "or" || op === "while") {
       const args = nodes.map(nodeParser);
@@ -412,7 +415,10 @@ function parseForm(
           ((ci.value.t === "func" && !ops[ci.value.v]) || ci.value.t === "str");
         captured[i] =
           (ci.typ === "ref" &&
-            !cins.find((i) => i.typ === "let" && i.value === ci.value)) ||
+            !cins.find(
+              (i) =>
+                (i.typ === "let" || i.typ === "var") && i.value === ci.value,
+            )) ||
           ci.typ === "npa" ||
           isExe;
         if (captured[i]) {

@@ -139,7 +139,7 @@ If anybody could improve this guide please make a PR!
   (.. and (map = x (reverse x))))
 ;or
 (function palindrome? x
-  (= x (reverse x))) ;Works even for lists as Insitux does deep equality checks
+  (= x (reverse x))) ;Works even for vectors due to deep equality checks
 
 (palindrome? "aabbxbbaa") → "aabbxbbaa"
 (palindrome? "abcd")      → false
@@ -148,14 +148,18 @@ If anybody could improve this guide please make a PR!
 
 
 ; Matrix addition
-(let A [[3  8] [4  6]])
-(let B [[4  0] [1 -9]])
+(let A [[3  8] [4  6]]
+     B [[4  0] [1 -9]])
+
 (map (map +) A B)
+→ [[7 8] [5 -3]]
 
 
 ; Matrix negation
 (let M [[2 -4] [7 10]])
+
 (map (map -) M)
+→ [[-2 4] [-7 -10]]
 
 
 ; Clojure's juxt

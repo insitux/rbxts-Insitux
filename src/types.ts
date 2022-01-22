@@ -93,8 +93,8 @@ export type Ins = { errCtx: ErrCtx } & (
   | { typ: "or" | "if" | "jmp" | "loo" | "cat" | "mat"; value: number } //Number of instructions
   | { typ: "ret"; value: boolean } //Return, with value?
   | { typ: "pop"; value: number } //Truncate stack, by number of values
-  | { typ: "clo" | "par"; value: Closure } //Closure and partial, text representation and instructions
-);
+  | { typ: "clo" | "par"; value: Closure }
+); //Closure and partial, text representation and instructions
 
 /** Definition of an operation in Insitux,
  * with guarantees made for arity (number of parameters) and parameter types.
@@ -194,7 +194,16 @@ export const ops: {
   },
   "to-key": { exactArity: 1, params: [["str", "num"]], returns: ["key"] },
   "has?": { exactArity: 2, params: ["str", "str"], returns: ["bool"] },
-  idx: { minArity: 2, maxArity: 3, params: [["str", "vec"]], returns: ["num"] },
+  idx: {
+    exactArity: 2,
+    params: [[], ["str", "vec"]],
+    returns: ["num"],
+  },
+  "set-at": {
+    exactArity: 3,
+    params: ["vec", [], ["vec", "dict"]],
+    returns: ["vec", "dict"],
+  },
   map: { minArity: 2, returns: ["vec"] },
   for: { minArity: 2, returns: ["vec"] },
   reduce: { minArity: 2, maxArity: 3 },
@@ -248,7 +257,21 @@ export const ops: {
     maxArity: 2,
     params: [["vec", "dict", "str"]],
     returns: ["vec"],
+  } /*
+  "group-by": {
+    exactArity: 2,
+    params: [[], ["vec", "dict", "str"]],
+    returns: ["dict"],
   },
+  "part-by": {
+    exactArity: 2,
+    params: [[], ["vec", "dict", "str"]],
+    returns: ["vec"],
+  },
+  set: {
+    minArity: 1,
+    returns: ["vec", "dict"],
+  },*/,
   keys: { exactArity: 1, params: ["dict"] },
   vals: { exactArity: 1, params: ["dict"] },
   do: { minArity: 1 },

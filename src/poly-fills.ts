@@ -31,7 +31,7 @@ export const slice = <T>(arr: T[], start?: number, _end?: number) => {
 
   if (!start && !_end) {
     arr.forEach((element) => result.push(element));
-  } else if (start) {
+  } else if (start !== undefined) {
     const cond = _end !== undefined ? _end : arr.size();
     for (let i = start; i < cond; i++) {
       result.push(arr[i]);
@@ -100,7 +100,7 @@ export const substr = (str: string, start: number, length?: number) => {
   return length ? str.sub(start + 1, start + 1 + length) : str.sub(start + 1);
 };
 export const strIdx = (str: string, idx: number) => str.sub(idx + 1, idx + 1);
-export const starts = (str: string, x: string) => str.sub(1, x.size()) === x;
+export const starts = (str: string, x: string) => subIdx(str, x) === 0;
 export const ends = (str: string, x: string): boolean => str.sub(-1, -1) === x;
 export const sortBy = <T>(arr: T[], by: (a: T, b: T) => number) =>
   arr.sort((a, b) => {
@@ -123,13 +123,25 @@ export const push = <T>(arr: T[], add: T[]) => {
   add.forEach((element) => arr.push(element));
 };
 
-export const subIdx = (a: string, b: string) => {
-  b = b.gsub("%(", "%%(")[0];
-  b = b.gsub("%)", "%%)")[0];
-  b = b.gsub("%[", "%%[")[0];
-  b = b.gsub("%]", "%%]")[0];
-  return string.find(a, b)[0] || -1;
+export const subIdx = (str: string, subStr: string) => {
+  const sLen = slen(subStr);
+  let a = -1;
+  let n = 0;
+  for (let i = 0, lim = slen(str); i < lim; ++i) {
+    if (strIdx(str, i) === strIdx(subStr, n)) {
+      a = a === -1 ? i : a;
+      ++n;
+      if (n === sLen) {
+        return a;
+      }
+    } else {
+      a = -1;
+      n = 0;
+    }
+  }
+  return -1;
 };
+
 export const range = (len: number) => {
   const res: number[] = [];
 
