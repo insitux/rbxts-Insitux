@@ -124,11 +124,7 @@ export const push = <T>(arr: T[], add: T[]) => {
 };
 
 export const subIdx = (a: string, b: string) => {
-  b = b.gsub("%(", "%%(")[0];
-  b = b.gsub("%)", "%%)")[0];
-  b = b.gsub("%[", "%%[")[0];
-  b = b.gsub("%]", "%%]")[0];
-  return string.find(a, b)[0] || -1;
+  return string.find(a, b, undefined, true)[0] || -1;
 };
 
 export const range = (len: number) => {
