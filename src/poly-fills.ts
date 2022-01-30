@@ -123,7 +123,13 @@ export const push = <T>(arr: T[], add: T[]) => {
   add.forEach((element) => arr.push(element));
 };
 
-export const subIdx = (a: string, b: string) => string.find(a, b)[0] || -1;
+export const subIdx = (a: string, b: string) => {
+  b = b.gsub("%(", "%%(")[0];
+  b = b.gsub("%)", "%%)")[0];
+  b = b.gsub("%[", "%%[")[0];
+  b = b.gsub("%]", "%%]")[0];
+  return string.find(a, b)[0] || -1;
+};
 
 export const range = (len: number) => {
   const res: number[] = [];
