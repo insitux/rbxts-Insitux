@@ -123,8 +123,24 @@ export const push = <T>(arr: T[], add: T[]) => {
   add.forEach((element) => arr.push(element));
 };
 
+function esc(x: string) {
+  x = x.gsub("%%", "%%%%")[0];
+  x = x.gsub("^%^", "%%^")[0];
+  x = x.gsub("%$$", "%%$")[0];
+  x = x.gsub("%(", "%%(")[0];
+  x = x.gsub("%)", "%%)")[0];
+  x = x.gsub("%.", "%%.")[0];
+  x = x.gsub("%[", "%%[")[0];
+  x = x.gsub("%]", "%%]")[0];
+  x = x.gsub("%*", "%%*")[0];
+  x = x.gsub("%+", "%%+")[0];
+  x = x.gsub("%-", "%%-")[0];
+  x = x.gsub("%?", "%%?")[0];
+  return x;
+}
+
 export const subIdx = (a: string, b: string) => {
-  return string.find(a, b, undefined, true)[0] || -1;
+  return string.find(a, esc(b))[0] || -1;
 };
 
 export const range = (len: number) => {
