@@ -120,8 +120,8 @@ export const ops: {
   print: { returns: ["null"] },
   "print-str": { returns: ["null"] },
   "!": { exactArity: 1, returns: ["bool"] },
-  "=": { minArity: 2 },
-  "!=": { minArity: 2 },
+  "=": { minArity: 2, returns: ["bool"] },
+  "!=": { minArity: 2, returns: ["bool"] },
   "+": { minArity: 2, numeric: true },
   "-": { minArity: 1, numeric: true },
   "*": { minArity: 2, numeric: true },
@@ -199,7 +199,7 @@ export const ops: {
     returns: ["num", "null"],
   },
   "to-key": { exactArity: 1, params: [["str", "num"]], returns: ["key"] },
-  "has?": { exactArity: 2, params: ["str", "str"], returns: ["bool"] },
+  "substr?": { exactArity: 2, params: ["str", "str"], returns: ["bool"] },
   idx: {
     exactArity: 2,
     params: [[], ["str", "vec"]],
@@ -259,25 +259,15 @@ export const ops: {
   },
   reverse: { exactArity: 1, params: [["vec", "str"]], returns: ["vec", "str"] },
   sort: {
-    minArity: 1,
-    maxArity: 2,
-    params: [["vec", "dict", "str"]],
+    exactArity: 1,
+    params: [["vec", "str"]],
     returns: ["vec"],
-  } /*
-  "group-by": {
-    exactArity: 2,
-    params: [[], ["vec", "dict", "str"]],
-    returns: ["dict"],
   },
-  "part-by": {
+  "sort-by": {
     exactArity: 2,
     params: [[], ["vec", "dict", "str"]],
     returns: ["vec"],
   },
-  set: {
-    minArity: 1,
-    returns: ["vec", "dict"],
-  },*/,
   keys: { exactArity: 1, params: ["dict"] },
   vals: { exactArity: 1, params: ["dict"] },
   do: { minArity: 1 },
@@ -288,7 +278,7 @@ export const ops: {
     params: [["str", "vec", "dict"]],
     returns: ["bool"],
   },
-  split: { minArity: 1, maxArity: 2, params: ["str", "str"], returns: ["vec"] },
+  split: { exactArity: 2, params: ["str", "str"], returns: ["vec"] },
   join: {
     exactArity: 2,
     params: ["str", ["vec", "dict", "str"]],

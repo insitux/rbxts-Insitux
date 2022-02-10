@@ -76,7 +76,7 @@ export const objKeys = (x: { [index: string]: unknown }): string[] => {
 };
 
 export const isNum = (x: unknown): x is number =>
-  tonumber(tostring(x)) !== undefined;
+  x !== "" && tonumber(tostring(x)) !== undefined;
 export const flat = <T>(arr: T[][]): T[] => combine<T>(arr); //e.g. [[0], [1], []] => [0, 1]
 export const has = (x: string | defined[], y: defined) => {
   if (typeIs(x, "string")) {

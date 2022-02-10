@@ -60,7 +60,7 @@ const poppedBody = (expressions: ParserIns[][]): ParserIns[] => {
 export function tokenise(
   code: string,
   invokeId: string,
-  makeCollsOps = true,
+  doTransforms = true,
   emitComments = false,
 ) {
   const tokens: Token[] = [];
@@ -72,9 +72,10 @@ export function tokenise(
       nextCh = i + 1 !== l ? strIdx(code, i + 1) : "";
     ++col;
     if (c === "\\" && inString) {
-      tokens[len(tokens) - 1].text +=
-        { n: "\n", t: "\t", r: "\r", '"': '"' }[nextCh] ||
-        (nextCh === "\\" ? "\\" : `\\${nextCh}`);
+      tokens[len(tokens) - 1].text += doTransforms
+        ? { n: "\n", t: "\t", r: "\r", '"': '"' }[nextCh] ||
+          (nextCh === "\\" ? "\\" : `\\${nextCh}`)
+        : `\\${nextCh}`;
       ++col;
       ++i;
       continue;
@@ -130,8 +131,8 @@ export function tokenise(
     if (!inString && !inSymbol && !inNumber) {
       if (isParen) {
         const text = subIdx("[{(", c) === -1 ? ")" : "(";
-        tokens.push({ typ: text, text: makeCollsOps ? text : c, errCtx });
-        if (makeCollsOps && (c === "[" || c === "{")) {
+        tokens.push({ typ: text, text: doTransforms ? text : c, errCtx });
+        if (doTransforms && (c === "[" || c === "{")) {
           tokens.push({ typ: "sym", text: c === "[" ? "vec" : "dict", errCtx });
         }
         continue;
@@ -507,7 +508,10 @@ function parseArg(node: Node, params: ParamsShape): ParserIns[] {
         return [{ typ: "val", value: { t: "wild", v: undefined }, errCtx }];
       } else if (starts(text, ":")) {
         return [{ typ: "val", value: <Val>{ t: "key", v: text }, errCtx }];
-      } else if (starts(text, "%") && isNum(substr(text, 1))) {
+      } else if (
+        text === "%" ||
+        (starts(text, "%") && isNum(substr(text, 1)))
+      ) {
         const value = toNum(substr(text, 1));
         if (value < 0) {
           return [{ typ: "val", value: nullVal, errCtx }];

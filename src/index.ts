@@ -1,4 +1,4 @@
-export const insituxVersion = 220131;
+export const insituxVersion = 220210;
 import { asBoo } from "./checks";
 import { arityCheck, keyOpErr, numOpErr, typeCheck, typeErr } from "./checks";
 import { capture } from "./closure";
@@ -100,7 +100,7 @@ function exeOp(
           return;
         }
       }
-      stack.push(args[0]);
+      _boo(true);
       return;
     case "-":
       _num(
@@ -126,11 +126,7 @@ function exeOp(
       return;
     case "fast=":
     case "fast!=":
-      if (isEqual(args[0], args[1]) !== (op === "fast=")) {
-        _boo(false);
-        return;
-      }
-      stack.push(args[0]);
+      _boo(isEqual(args[0], args[1]) === (op === "fast="));
       return;
     case "fast-":
       _num(<number>args[0].v - <number>args[1].v);
@@ -291,8 +287,8 @@ function exeOp(
       );
       return;
     }
-    case "has?":
-      _boo(sub(str(args[0]), str(args[1])));
+    case "substr?":
+      _boo(sub(str(args[1]), str(args[0])));
       return;
     case "idx": {
       let i = -1;
@@ -483,6 +479,7 @@ function exeOp(
       for (let i = 0, lim = len(args); i < lim; ++i) {
         const errors = getExe(ctx, args[i], errCtx)([stack.pop()!]);
         if (errors) {
+          errors.forEach((err) => (err.m = `-> arg ${i + 2}: ${err.m}`));
           return errors;
         }
       }
@@ -603,20 +600,21 @@ function exeOp(
         _vec(reverse(asArray(args[0])));
       }
       return;
-    case "sort": {
-      const src = asArray(args[0]);
+    case "sort":
+    case "sort-by": {
+      const src = asArray(args[op === "sort" ? 0 : 1]);
       if (!len(src)) {
         _vec();
         return;
       }
       const mapped: Val[][] = [];
-      if (len(args) === 1) {
+      if (op === "sort") {
         push(
           mapped,
           src.map((v) => [v, v]),
         );
       } else {
-        const closure = getExe(ctx, args.pop()!, errCtx);
+        const closure = getExe(ctx, args[0], errCtx);
         for (let i = 0, lim = len(src); i < lim; ++i) {
           const errors = closure([src[i]]);
           if (errors) {
@@ -665,8 +663,8 @@ function exeOp(
       return;
     case "split":
       _vec(
-        str(args[len(args) - 1])
-          .split(len(args) - 1 ? str(args[0]) : " ")
+        str(args[1])
+          .split(str(args[0]))
           .map((v) => <Val>{ t: "str", v }),
       );
       return;
@@ -1160,6 +1158,7 @@ function removeExternalOperations(functions: ExternalFunction[]) {
 function innerInvoke(
   ctx: Ctx,
   closure: () => InvokeError[] | undefined,
+  printResult: boolean,
 ): InvokeResult {
   const { callBudget, loopBudget, recurBudget, rangeBudget } = ctx;
   ingestExternalOperations(ctx.functions);
@@ -1170,6 +1169,9 @@ function innerInvoke(
   delete ctx.env.funcs["entry"];
   const value = stack.pop();
   [stack, letsStack] = [[], []];
+  if (printResult && !errors && value) {
+    ctx.print(val2str(value), true);
+  }
   return errors
     ? { kind: "errors", errors }
     : value
@@ -1192,11 +1194,7 @@ export function invoke(
   invokeId: string,
   printResult = false,
 ): InvokeResult {
-  const result = innerInvoke(ctx, () => parseAndExe(ctx, code, invokeId));
-  if (printResult && result.kind === "val") {
-    ctx.print(val2str(result.value), true);
-  }
-  return result;
+  return innerInvoke(ctx, () => parseAndExe(ctx, code, invokeId), printResult);
 }
 
 /**
@@ -1204,6 +1202,7 @@ export function invoke(
  * @param ctx An environment context you retain.
  * @param funcName The function to execute.
  * @param params The parameters to pass to the function.
+ * @param printResult Automatically print the final value of this invocation?
  * @returns Invocation errors caused during execution of the function,
  * or the final value of the invocation,
  * or undefined if the function was not found.
@@ -1212,11 +1211,16 @@ export function invokeFunction(
   ctx: Ctx,
   funcName: string,
   params: Val[],
+  printResult = false,
 ): InvokeResult | undefined {
   if (!(funcName in ctx.env.funcs)) {
     return;
   }
-  return innerInvoke(ctx, () => exeFunc(ctx, ctx.env.funcs[funcName], params));
+  return innerInvoke(
+    ctx,
+    () => exeFunc(ctx, ctx.env.funcs[funcName], params),
+    printResult,
+  );
 }
 
 /**
@@ -1228,8 +1232,8 @@ export function invokeFunction(
 export function symbols(ctx: Ctx, alsoSyntax = true): string[] {
   let syms: string[] = [];
   if (alsoSyntax) {
-    push(syms, ["function", "let", "var", "if", "if!"]);
-    push(syms, ["when", "while", "loop", "match", "catch"]);
+    push(syms, ["function", "fn", "var", "let", "var!", "let!", "return"]);
+    push(syms, ["if", "if!", "when", "while", "loop", "match", "catch"]);
   }
   push(syms, ["args", "PI", "E"]);
   syms = concat(syms, objKeys(ops));
