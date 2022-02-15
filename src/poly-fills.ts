@@ -97,7 +97,11 @@ export const concat = <T>(a: T[], b: T[]): T[] => {
 export const sub = (x: string, s: string): boolean =>
   x.find(s, undefined, true)[0] !== undefined;
 export const substr = (str: string, start: number, length?: number) => {
-  return length ? str.sub(start + 1, start + 1 + length) : str.sub(start + 1);
+  return length !== undefined
+    ? length > 0
+      ? str.sub(start + 1, start + length)
+      : ""
+    : str.sub(start + 1);
 };
 export const strIdx = (str: string, idx: number) => str.sub(idx + 1, idx + 1);
 export const starts = (str: string, x: string) => subIdx(str, x) === 0;
