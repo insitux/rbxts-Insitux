@@ -512,7 +512,7 @@ function parseArg(node: Node, params: ParamsShape): ParserIns[] {
         text === "%" ||
         (starts(text, "%") && isNum(substr(text, 1)))
       ) {
-        const value = toNum(substr(text, 1));
+        const value = text === "%" ? 0 : toNum(substr(text, 1));
         if (value < 0) {
           return [{ typ: "val", value: nullVal, errCtx }];
         }
