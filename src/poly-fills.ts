@@ -80,7 +80,7 @@ export const isNum = (x: unknown): x is number =>
 export const flat = <T>(arr: T[][]): T[] => combine<T>(arr); //e.g. [[0], [1], []] => [0, 1]
 export const has = (x: string | defined[], y: defined) => {
   if (typeIs(x, "string")) {
-    return x.find(y as string) !== undefined;
+    return x.find(y as string, 1, true) !== undefined;
   } else {
     return x.includes(y);
   }
@@ -101,6 +101,7 @@ export const substr = (str: string, start: number, length?: number) => {
 };
 export const strIdx = (str: string, idx: number) => str.sub(idx + 1, idx + 1);
 export const starts = (str: string, x: string) => subIdx(str, x) === 0;
+//TODO: this needs to check more than one character
 export const ends = (str: string, x: string): boolean => str.sub(-1, -1) === x;
 export const sortBy = <T>(arr: T[], by: (a: T, b: T) => number) =>
   arr.sort((a, b) => {
@@ -123,24 +124,9 @@ export const push = <T>(arr: T[], add: T[]) => {
   add.forEach((element) => arr.push(element));
 };
 
-function esc(x: string) {
-  x = x.gsub("%%", "%%%%")[0];
-  x = x.gsub("^%^", "%%^")[0];
-  x = x.gsub("%$$", "%%$")[0];
-  x = x.gsub("%(", "%%(")[0];
-  x = x.gsub("%)", "%%)")[0];
-  x = x.gsub("%.", "%%.")[0];
-  x = x.gsub("%[", "%%[")[0];
-  x = x.gsub("%]", "%%]")[0];
-  x = x.gsub("%*", "%%*")[0];
-  x = x.gsub("%+", "%%+")[0];
-  x = x.gsub("%-", "%%-")[0];
-  x = x.gsub("%?", "%%?")[0];
-  return x;
-}
-
 export const subIdx = (a: string, b: string) => {
-  return string.find(a, esc(b))[0] || -1;
+  const found = string.find(a, b, 1, true)[0];
+  return found ? found - 1 : -1;
 };
 
 export const range = (len: number) => {
