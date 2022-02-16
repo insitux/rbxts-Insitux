@@ -30,7 +30,7 @@
 
 Include https://github.com/insitux/rbxts-Insitux into your roblox-ts project: `npm i @rbxts/insitux`
 
-Exposed are `invoke()` and `invokeFunction()`. Both require a `Ctx` instance, along with a generated source ID. Also exposed is `addOperation()` to extend Insitux with your own functions easier than `exe` explained below.  
+Exposed are `invoke()` and `invokeFunction()`. Both require a `Ctx` instance, along with a generated source ID.  
 Further explanation can be found in the docstring of most functions and types like `invoke`, `Ctx`, `symbols`, etc.
 
 ```ts
@@ -38,6 +38,7 @@ export type Ctx = {
   set: (key: string, val: Val) => undefined | string;
   get: (key: string) => ValOrErr;
   exe: (name: string, args: Val[]) => ValOrErr;
+  functions: ExternalFunction[];
   print: (str: string, withNewline: boolean) => void;
   env: Env;
   loopBudget: number;
@@ -48,7 +49,8 @@ export type Ctx = {
 ```
 
 - `set` and `get` should be used to directly write/read values in your game.  
-- `exe` is used to extend Insitux with custom functions. This is called any time
+- `functions` lets you define your own Insitux functions, with the same arity and type-checking as internal operations!  
+- `exe` is used to handle function calls any time
 Insitux fails to dereference an expression head as something internal or
 previously defined through `Ctx.functions[]`. For example `(abc 123)`, unless
 `abc` is an already defined let/var/function it will call `exe` with `abc` as
