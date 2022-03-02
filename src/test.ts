@@ -46,8 +46,8 @@ const tests: {
   { name: "(1+1)+1+(1+1) = 5", code: `(+ (+ 1 1) 1 (+ 1 1))`, out: `5` },
   { name: "Conditional head", code: `((if true + -) 12 9 1)`, out: `22` },
   {
-    name: "Whens",
-    code: `[(when 123 (print "hi") 234) (when false (print "bye"))]`,
+    name: "when and unless",
+    code: `[(when 123 (print "hi") 234) (unless true (print "bye"))]`,
     out: `hi\n[234 null]`,
   },
   {
@@ -303,18 +303,28 @@ const tests: {
              (fn primes num
                (if (find zero? (map (rem num) primes))
                  primes
-                 (push primes num)))
+                 (append num primes)))
              [2]
              (range 3 10))`,
     out: `[2 3 5 7]`,
   },
   {
-    name: "Closure with mixed lets",
+    name: "Closure with inter-lets",
     code: `(let a + c 5 d 10)
            (let closure (fn b (let d 1) (a b c d)))
            (let a - c 4 d 11)
            (closure 1)`,
     out: `7`,
+  },
+  {
+    name: "Closure with inner-let",
+    code: `(((fn x (let y 1) #[x y]) 2))`,
+    out: `[2 1]`,
+  },
+  {
+    name: "Closure with captured f",
+    code: `[((fn x (@(val x))) 0) (var f val) ((fn x (@(f x))) 0)]`,
+    out: `[0 val 0]`,
   },
   {
     name: "Destructure var",
@@ -395,7 +405,7 @@ const tests: {
   {
     name: "frequencies",
     code: `(function frequencies list
-             (reduce #(push % %1 (inc (or (% %1) 0))) {} list))
+             (reduce #(% %1 (inc (or (% %1) 0))) {} list))
            (frequencies "12121212")`,
     out: `{"1" 4, "2" 4}`,
   },

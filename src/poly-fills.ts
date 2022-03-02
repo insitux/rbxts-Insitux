@@ -107,6 +107,8 @@ export const strIdx = (str: string, idx: number) => str.sub(idx + 1, idx + 1);
 export const starts = (str: string, x: string) => subIdx(str, x) === 0;
 //TODO: this needs to check more than one character
 export const ends = (str: string, x: string): boolean => str.sub(-1, -1) === x;
+export const replace = (str: string, what: string, to: string): string =>
+  str.split(what).join(to);
 export const sortBy = <T>(arr: T[], by: (a: T, b: T) => number) =>
   arr.sort((a, b) => {
     const res = by(a, b);

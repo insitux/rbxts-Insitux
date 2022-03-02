@@ -4,8 +4,8 @@ import * as pf from "./poly-fills";
 const { has, flat, push, slice, splice } = pf;
 const { slen, starts, sub, substr, strIdx, subIdx } = pf;
 const { isNum, len, toNum } = pf;
-import { ParamsShape, ErrCtx, Func, Funcs, Ins, ops, Val } from "./types";
-import { assertUnreachable, InvokeError } from "./types";
+import { ParamsShape, Func, Funcs, Ins, ops, Val, syntaxes } from "./types";
+import { assertUnreachable, InvokeError, ErrCtx } from "./types";
 
 export type Token = {
   typ: "str" | "num" | "sym" | "rem" | "(" | ")";
@@ -91,7 +91,8 @@ export function tokenise(
     }
     const isWhite = sub(" \t\n\r,", c);
     if (!inString && isWhite) {
-      inNumber = inSymbol = false;
+      inSymbol = false;
+      inNumber &&= c === ",";
       if (c === "\n") {
         ++line;
         col = 0;
@@ -237,7 +238,7 @@ function parseForm(
       <ParserIns>{ typ: "err", value: m, errCtx: eCtx },
     ];
 
-    if (has(["if", "if!", "when", "match"], op) && !len(nodes)) {
+    if (has(["if", "if!", "when", "unless", "match"], op) && !len(nodes)) {
       return err("provide a condition");
     } else if (has(["if", "if!"], op)) {
       if (len(nodes) === 1) {
@@ -263,7 +264,7 @@ function parseForm(
         { typ: "jmp", value: len(branch2), errCtx },
         ...branch2,
       ];
-    } else if (op === "when") {
+    } else if (op === "when" || op === "unless") {
       if (len(nodes) === 1) {
         return err("provide a body");
       }
@@ -272,6 +273,12 @@ function parseForm(
       const bodyIns = poppedBody(body);
       return [
         ...cond,
+        ...(op === "unless"
+          ? [
+              <Ins>{ typ: "val", value: { t: "func", v: "!" } },
+              <Ins>{ typ: "exe", value: 1 },
+            ]
+          : []),
         { typ: "if", value: len(bodyIns) + 1, errCtx },
         ...bodyIns,
         { typ: "jmp", value: 1, errCtx },
@@ -388,19 +395,23 @@ function parseForm(
         return err("provide a value after each declaration name");
       }
       const ins: ParserIns[] = [];
+      const symErrMsg = `${op} name must be a new symbol or destructuring`;
       for (let d = 0, lim = len(defs); d < lim; ++d) {
         push(ins, nodeParser(vals[d]));
         const def = defs[d];
         if (isToken(def)) {
           const defIns = parseNode(defs[d], params);
           if (len(defIns) > 1 || defIns[0].typ !== "ref") {
-            return err("declaration name must be symbol", defIns[0].errCtx);
+            return err(symErrMsg, defIns[0].errCtx);
           }
           ins.push({ typ: op, value: defIns[0].value, errCtx });
         } else {
           const { shape, errors } = parseParams([def], true);
           if (len(errors)) {
             return errors;
+          }
+          if (!len(shape)) {
+            return err(symErrMsg);
           }
           const typ = op === "var" ? "dva" : "dle";
           ins.push({ typ, value: shape, errCtx });
@@ -427,6 +438,7 @@ function parseForm(
       const pins: ParserIns[] = [];
       const name = node2str([firstNode, ...nodes]);
       const cloParams: string[] = [];
+      let monoFnBody = false;
       if (op === "fn") {
         const parsedParams = parseParams(nodes, false);
         push(
@@ -438,10 +450,19 @@ function parseForm(
         if (!len(nodes)) {
           return err("provide a body");
         }
+        monoFnBody = len(nodes) === 1;
         nodes.unshift({ typ: "sym", text: "do", errCtx });
       }
       //Rewrite partial closure to #(... [body] args)
       if (op === "@") {
+        const firstSym = symAt(nodes, 0);
+        if (has(syntaxes, firstSym)) {
+          const { errCtx } = nodes[0] as Token;
+          return err(
+            `"${firstSym}" syntax unavailable in partial closure`,
+            errCtx,
+          );
+        }
         nodes = [
           { typ: "sym", text: "...", errCtx },
           ...nodes,
@@ -454,16 +475,14 @@ function parseForm(
       if (len(errors)) {
         return errors;
       }
-      //TODO: explain what this is for
-      if (op === "fn") {
-        cins.forEach((i) => {
-          if (i.typ === "npa") {
-            i.typ = "upa";
-          }
-        });
+      //Remove do exe when fn body is only one expression
+      if (monoFnBody) {
+        cins.pop();
+        cins.pop();
       }
       return [
         { typ: "clo", value: makeClosure(name, cloParams, cins), errCtx },
+        ...cins,
       ];
     }
 
@@ -492,7 +511,7 @@ function parseForm(
     head[0] = { typ: "val", value: { t: "str", v }, errCtx };
   }
   push(ins, head);
-  const typ = len(head) > 1 ? "exa" : "exe";
+  const typ = len(head) > 1 || has(["npa", "upa"], head[0].typ) ? "exa" : "exe";
   return [...ins, { typ, value: len(args), errCtx }];
 }
 
@@ -745,10 +764,11 @@ function insErrorDetect(fins: Ins[]): InvokeError[] | undefined {
       case "jmp":
         break;
       case "clo": {
-        const errors = insErrorDetect(ins.value.cins);
+        const errors = insErrorDetect(slice(fins, i + 1, i + ins.value.length));
         if (errors) {
           return errors;
         }
+        stack.push({});
       }
       case "ref":
       case "npa":

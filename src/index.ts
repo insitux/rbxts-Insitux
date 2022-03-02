@@ -1,4 +1,4 @@
-export const insituxVersion = 220215;
+export const insituxVersion = 220301;
 import { asBoo } from "./checks";
 import { arityCheck, keyOpErr, numOpErr, typeCheck, typeErr } from "./checks";
 import { makeEnclosure } from "./closure";
@@ -8,12 +8,12 @@ const { abs, sign, sqrt, floor, ceil, round, max, min, logn, log2, log10 } = pf;
 const { cos, sin, tan, acos, asin, atan, sinh, cosh, tanh } = pf;
 const { concat, has, flat, push, reverse, slice, splice, sortBy } = pf;
 const { ends, slen, starts, sub, subIdx, substr, upperCase, lowerCase } = pf;
-const { trim, trimStart, trimEnd, charCode, codeChar, strIdx } = pf;
+const { trim, trimStart, trimEnd, charCode, codeChar, strIdx, replace } = pf;
 const { getTimeMs, randInt, randNum } = pf;
-const { isNum, len, objKeys, range, toNum } = pf;
+const { isNum, len, objKeys, range, toNum, isArray } = pf;
 import { doTests } from "./test";
 import { assertUnreachable, InvokeError, InvokeResult } from "./types";
-import { ExternalFunction, ExternalHandler } from "./types";
+import { ExternalFunction, ExternalHandler, syntaxes } from "./types";
 import { Ctx, Dict, ErrCtx, Func, Ins, Val, ops, typeNames } from "./types";
 import { asArray, isEqual, num, str, stringify, val2str, vec } from "./val";
 import { dic, dictDrop, dictGet, dictSet, toDict, pathSet } from "./val";
@@ -72,6 +72,9 @@ function exeOp(
       return;
     case "to-key":
       stack.push({ t: "key", v: `:${val2str(args[0])}` });
+      return;
+    case "to-vec":
+      _vec(asArray(args[0]));
       return;
     case "!":
       _boo(!asBoo(args[0]));
@@ -271,6 +274,9 @@ function exeOp(
       );
       return;
     }
+    case "type-of":
+      _str(args[0].t);
+      return;
     case "substr?":
       _boo(sub(str(args[1]), str(args[0])));
       return;
@@ -520,21 +526,28 @@ function exeOp(
       }
       return;
     }
-    case "push": {
-      if (args[0].t === "vec") {
-        const v = args[0].v;
-        if (len(args) < 3) {
-          _vec(concat(v, [args[1]]));
-        } else {
-          const n = num(args[2]);
-          _vec(concat(concat(slice(v, 0, n), [args[1]]), slice(v, n)));
-        }
+    case "omit":
+      stack.push(dictDrop(dic(args[1]), args[0]));
+      return;
+    case "assoc":
+      _dic(dictSet(dic(args[2]), args[0], args[1]));
+      return;
+    case "append":
+      _vec(concat(vec(args[1]), [args[0]]));
+      return;
+    case "prepend":
+      _vec(concat([args[0]], vec(args[1])));
+      return;
+    case "insert": {
+      const v = vec(args[2]);
+      let n = num(args[1]);
+      if (n === 0) {
+        _vec(concat([args[0]], v));
+      } else if (n === -1) {
+        _vec(concat(v, [args[0]]));
       } else {
-        if (len(args) < 3) {
-          stack.push(dictDrop(dic(args[0]), args[1]));
-        } else {
-          _dic(dictSet(dic(args[0]), args[1], args[2]));
-        }
+        n = n > 0 ? min(n, len(v)) : max(len(v) + 1 + n, 0);
+        _vec(concat(concat(slice(v, 0, n), [args[0]]), slice(v, n)));
       }
       return;
     }
@@ -584,6 +597,24 @@ function exeOp(
         _vec(reverse(asArray(args[0])));
       }
       return;
+    case "flatten": {
+      const src = vec(args[0]);
+      const flattened: Val[] = [];
+      const recur = (vec: Val[]): void =>
+        vec.forEach((v) => (v.t === "vec" ? recur(v.v) : flattened.push(v)));
+      recur(src);
+      _vec(flattened);
+      return;
+    }
+    case "shuffle": {
+      const arr = slice(vec(args[0]));
+      for (let i = len(arr) - 1; i; --i) {
+        const j = floor(randInt(0, i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      _vec(arr);
+      return;
+    }
     case "sort":
     case "sort-by": {
       const src = asArray(args[op === "sort" ? 0 : 1]);
@@ -617,6 +648,112 @@ function exeOp(
         sortBy(mapped, ([x, a], [y, b]) => (str(a) > str(b) ? 1 : -1));
       }
       _vec(mapped.map(([v]) => v));
+      return;
+    }
+    case "group-by": {
+      const closure = getExe(ctx, args[0], errCtx);
+      const groups: Dict = { keys: [], vals: [] };
+      const isDic = args[1].t === "dict";
+      if (isDic) {
+        const { keys, vals } = dic(args[1]);
+        for (let i = 0, lim = len(keys); i < lim; ++i) {
+          const errors = closure([keys[i], vals[i]]);
+          if (errors) {
+            return errors;
+          }
+          const v = stack.pop()!;
+          const existingKey = groups.keys.findIndex((k) => isEqual(k, v));
+          if (existingKey === -1) {
+            groups.keys.push(v);
+            groups.vals.push({
+              t: "dict",
+              v: { keys: [keys[i]], vals: [vals[i]] },
+            });
+          } else {
+            const subDict = dic(groups.vals[existingKey]);
+            subDict.keys.push(keys[i]);
+            subDict.vals.push(vals[i]);
+          }
+        }
+      } else {
+        const src = asArray(args[1]);
+        for (let i = 0, lim = len(src); i < lim; ++i) {
+          const errors = closure([src[i]]);
+          if (errors) {
+            return errors;
+          }
+          const v = stack.pop()!;
+          const existingKey = groups.keys.findIndex((k) => isEqual(k, v));
+          if (existingKey === -1) {
+            groups.keys.push(v);
+            groups.vals.push({ t: "vec", v: [src[i]] });
+          } else {
+            const subVec = vec(groups.vals[existingKey]);
+            subVec.push(src[i]);
+          }
+        }
+      }
+      _dic(groups);
+      return;
+    }
+    case "part-by": {
+      const closure = getExe(ctx, args[0], errCtx);
+      const isDic = args[1].t === "dict";
+      if (isDic) {
+        const { keys, vals } = dic(args[1]);
+        const parted: Dict[] = [
+          { keys: [], vals: [] },
+          { keys: [], vals: [] },
+        ];
+        for (let i = 0, lim = len(keys); i < lim; ++i) {
+          const errors = closure([keys[i], vals[i]]);
+          if (errors) {
+            return errors;
+          }
+          const p = asBoo(stack.pop()!) ? 0 : 1;
+          parted[p].keys.push(keys[i]);
+          parted[p].vals.push(vals[i]);
+        }
+        _vec(parted.map((v) => <Val>{ t: "dict", v }));
+      } else {
+        const src = asArray(args[1]);
+        const parted: Val[][] = [[], []];
+        for (let i = 0, lim = len(src); i < lim; ++i) {
+          const errors = closure([src[i]]);
+          if (errors) {
+            return errors;
+          }
+          parted[asBoo(stack.pop()!) ? 0 : 1].push(src[i]);
+        }
+        _vec(parted.map((v) => <Val>{ t: "vec", v }));
+      }
+      return;
+    }
+    case "frequencies": {
+      const src = asArray(args[0]);
+      const distinct: Val[] = [];
+      const counts: number[] = [];
+      src.forEach((x) => {
+        const i = distinct.findIndex((y) => isEqual(x, y));
+        if (i !== -1) {
+          ++counts[i];
+        } else {
+          distinct.push(x);
+          counts.push(1);
+        }
+      });
+      _dic({ keys: distinct, vals: counts.map((v) => <Val>{ t: "num", v }) });
+      return;
+    }
+    case "distinct": {
+      const arr = len(args) === 1 && args[0].t === "vec" ? vec(args[0]) : args;
+      const distinct: Val[] = [];
+      arr.forEach((a) => {
+        if (!distinct.some((v) => isEqual(a, v))) {
+          distinct.push(a);
+        }
+      });
+      _vec(distinct);
       return;
     }
     case "range": {
@@ -654,6 +791,9 @@ function exeOp(
       return;
     case "join":
       _str(asArray(args[1]).map(val2str).join(str(args[0])));
+      return;
+    case "replace":
+      _str(replace(str(args[2]), str(args[0]), str(args[1])));
       return;
     case "starts?":
     case "ends?":
@@ -727,6 +867,44 @@ function exeOp(
       }
       return;
     }
+    case "about": {
+      const func = str(args[0]);
+      const entry = ops[func];
+      if (!entry) {
+        _nul();
+        return;
+      }
+      const infos: Val[] = [];
+      const info = (what: string, val: Val) =>
+        infos.push({ t: "key", v: `:${what}` }, val);
+      const toStrVec = (v: (string | string[])[]): Val => ({
+        t: "vec",
+        v: v.map((typ) =>
+          isArray(typ)
+            ? { t: "vec", v: typ.map((v) => <Val>{ t: "str", v }) }
+            : { t: "str", v: typ },
+        ),
+      });
+      info("external?", { t: "bool", v: !!entry.external });
+      if (entry.exactArity) {
+        info("exact-arity", { t: "num", v: entry.exactArity });
+      } else {
+        if (entry.minArity) {
+          info("minimum-arity", { t: "num", v: entry.minArity });
+        }
+        if (entry.maxArity) {
+          info("maximum-arity", { t: "num", v: entry.maxArity });
+        }
+      }
+      if (entry.params || entry.numeric) {
+        info("in-types", toStrVec(entry.params ? entry.params : ["num"]));
+      }
+      if (entry.returns || entry.numeric === true) {
+        info("out-types", toStrVec(entry.returns ? entry.returns : ["num"]));
+      }
+      stack.push(toDict(infos));
+      return;
+    }
     case "recur":
       recurArgs = args;
       return;
@@ -789,7 +967,7 @@ function getExe(
         checks(name, params, errCtx, checkArity) ||
         exeOp(name, params, ctx, errCtx);
     }
-    if (name in ctx.env.funcs) {
+    if (name in ctx.env.funcs && name !== "entry") {
       return (params: Val[]) => exeFunc(ctx, ctx.env.funcs[name], params);
     }
     if (name in ctx.env.vars) {
@@ -1044,7 +1222,6 @@ function exeFunc(
         if (recurArgs) {
           letsStack[len(letsStack) - 1] = {};
           i = -1;
-          const nArgs = ins.value;
           args = recurArgs;
           recurArgs = undefined;
           --ctx.recurBudget;
@@ -1101,7 +1278,7 @@ function exeFunc(
         break;
       case "clo": {
         //Ensure any in-scope declarations are captured here
-        const derefIns = slice(ins.value.derefIns).map((ins, i) => {
+        const derefIns = slice(ins.value.derefs).map((ins) => {
           const decl =
             ins.typ === "val" &&
             ins.value.t === "str" &&
@@ -1109,13 +1286,16 @@ function exeFunc(
           return decl ? <Ins>{ typ: "val", value: decl } : ins;
         });
         //Dereference closure captures
-        exeFunc(ctx, { ins: derefIns }, args, true);
+        const errors = exeFunc(ctx, { ins: derefIns }, args, true);
+        if (errors) {
+          return errors;
+        }
+        //Enclose the closure with dereferenced values
         const numIns = len(derefIns);
         const captures = splice(stack, len(stack) - numIns, numIns);
-        stack.push(<Val>{
-          t: "clo",
-          v: makeEnclosure(ins.value, captures),
-        });
+        const cins = slice(func.ins, i + 1, i + 1 + ins.value.length);
+        stack.push({ t: "clo", v: makeEnclosure(ins.value, cins, captures) });
+        i += ins.value.length;
         break;
       }
       default:
@@ -1240,8 +1420,7 @@ export function invokeFunction(
 export function symbols(ctx: Ctx, alsoSyntax = true): string[] {
   let syms: string[] = [];
   if (alsoSyntax) {
-    push(syms, ["function", "fn", "var", "let", "var!", "let!", "return"]);
-    push(syms, ["if", "if!", "when", "while", "loop", "match", "catch"]);
+    push(syms, syntaxes);
   }
   push(syms, ["args", "PI", "E"]);
   syms = concat(syms, objKeys(ops));
