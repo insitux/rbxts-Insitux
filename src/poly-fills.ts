@@ -1,12 +1,8 @@
-import { t } from "@rbxts/t";
-
-const is_table = t.array(t.any);
-
 function combine<T extends defined>(arr: (T[] | T)[]): T[] {
   const _result: T[] = [];
   const _combine = (arr: T[]) => {
     arr.forEach((element) => {
-      if (is_table(element)) {
+      if (isArray(element)) {
         _combine(element as unknown as T[]);
       } else {
         _result.push(element);
@@ -170,7 +166,18 @@ export const acos = math.acos;
 export const atan = math.atan;
 export const pi = math.pi;
 
-export const isArray = (x: unknown): x is unknown[] => t.array(t.any)(x);
+export const isArray = (x: unknown): x is unknown[] => {
+  if (type(x) === "table") {
+    for (const [index, value] of pairs(
+      x as { [index: string | number]: unknown },
+    )) {
+      if (type(index) !== "number") return false;
+    }
+    return true;
+  } else {
+    return false;
+  }
+};
 
 export const logn = (x: number) => math.log(x);
 export const log2 = (x: number) => math.log(x, 2);
