@@ -24,11 +24,11 @@
 </table>
 
 - [Main Github repository](https://github.com/phunanon/Insitux) - learn everything else about Insitux here
-- [Roblox-ts NPM package](https://www.npmjs.com/package/@rbxts/insitux) and its [Github repository](https://github.com/insitux/rbxts-Insitux).
+- [Roblox-TS NPM package](https://www.npmjs.com/package/@rbxts/insitux) and its [Github repository](https://github.com/insitux/rbxts-Insitux).
 
 ## Usage
 
-Include https://github.com/insitux/rbxts-Insitux into your roblox-ts project: `npm i @rbxts/insitux`
+Include https://github.com/insitux/rbxts-Insitux into your Roblox-TS project: `npm i @rbxts/insitux`
 
 Exposed are `invoke()` and `invokeFunction()`. Both require a `Ctx` instance, along with a generated source ID.  
 Further explanation can be found in the docstring of most functions and types like `invoke`, `Ctx`, `symbols`, etc.
@@ -84,6 +84,16 @@ If anybody could improve this guide please make a PR!
 
 (fib 13) → 233
 
+; and iterative
+
+(function fib n
+  (when (zero? n) (return 0))
+  (let a 1 b 0)
+  (loop n i
+    (let t (+ a b) a b b t)))
+
+(fib 35) → 9227465
+
 
 ; FizzBuzz with match syntax
 (function fizzbuzz n
@@ -120,16 +130,17 @@ If anybody could improve this guide please make a PR!
   (fn primes num
     (if (find zero? (map (rem num) primes))
       primes
-      (push primes num)))
+      (append num primes)))
   [2]
   (range 3 1000))
 
 
 ; Generate random strong password
-(-> (fn a b (repeat #(char-code (rand-int a b)) 4))
-   #(map % [97 65 48 33] [123 91 58 48])
-   @(.. .. vec)
-   #(sort % #(rand-int))
+(-> #(map rand-int [97 65 48 33] [123 91 58 48])
+    (times 4)
+    flatten
+    shuffle
+    (map char-code)
     (.. str))
 
 → "d$W1iP*tO9'V9(y8"
@@ -143,78 +154,64 @@ If anybody could improve this guide please make a PR!
 (function palindrome? x
   (= x (reverse x))) ;Works even for vectors due to deep equality checks
 
-(palindrome? "aabbxbbaa") → "aabbxbbaa"
+(palindrome? "aabbxbbaa") → true
 (palindrome? "abcd")      → false
 (palindrome? [0 1 2])     → false
-(palindrome? [2 1 2])     → [2 1 2]
+(palindrome? [2 1 2])     → true
 
 
-; Matrix addition
-(let A [[3  8] [4  6]]
+; Matrix addition, subtraction, transposition
+(var A [[3  8] [4  6]]
      B [[4  0] [1 -9]])
 
 (map (map +) A B)
 → [[7 8] [5 -3]]
 
-
-; Matrix negation
-(let M [[2 -4] [7 10]])
+(var M [[2 -4] [7 10]])
 
 (map (map -) M)
 → [[-2 4] [-7 -10]]
 
+(var M [[0 1 2] [3 4 5]])
 
-; Clojure's juxt
-(function juxt
-  (let funcs args)
-  #(for ... funcs [args]))
+(@(.. map vec) M)
+→ [[0 3] [1 4] [2 5]]
 
-((juxt + - * /) 10 8)
-→ [18 2 80 1.25]
 
+; Find first repeated letter
+(function find-two-in-row text
+  (-> (map (.. ==) text (skip 1 text))
+      (find val)))
+
+(find-two-in-row "Hello") → "l"
+
+
+; Add thousands separator
+(var thousands (comp str reverse (partition 3) reverse (join ",")))
+(thousands 1234567890) → "1,432,765,098"
 
 ; Clojure's comp
 (function comp f
   (let funcs (sect args))
-  #(do (let 1st (.. f args))
+  #(do (let 1st (... f args))
        (reduce #(%1 %) 1st funcs)))
 
 (map (comp + inc) [0 1 2 3 4] [0 1 2 3 4])
 → [1 3 5 7 9]
 
 
-; Clojure's frequencies
-(function frequencies list
-  (reduce #(push % %1 (inc (or (% %1) 0))) {} list))
-
-(frequencies "hello")
-→ {"h" 1, "e" 1, "l" 2, "o" 1}
-
-
-; Deduplicate a list recursively
-(function dedupe list -out
-  (let out  (or -out [])
-       next (if (out (0 list)) [] [(0 list)]))
-  (if (empty? list) out
-    (recur (sect list) (into out next))))
-;or via dictionary keys
-(function dedupe list
-  (keys (.. .. dict (for vec list [0]))))
-;or via reduction
-(function dedupe list
-  (reduce #(if (% %1) % (push % %1)) [] list))
-
-(dedupe [1 2 3 3])
-→ [1 2 3]
-
-
 ; Time a function call
 (function measure
-  (let [start result end] [(time) (.. . args) (time)])
+  (let [start result end] [(time) (... . args) (time)])
   (str result " took " (- end start) "ms"))
 
 (measure fib 35)
-→ "9227465 took 38003ms"
+→ "9227465 took 22914ms"
+
+
+;Insitux quine
+(#(join(char-code 34)[% %(char-code 41)])"(#(join(char-code 34)[% %(char-code 41)])")
+→ (#(join(char-code 34)[% %(char-code 41)])"(#(join(char-code 34)[% %(char-code 41)])")
 
 
 ; Display the Mandelbrot fractal as ASCII
@@ -239,33 +236,36 @@ If anybody could improve this guide please make a PR!
 (function vec->html v
   (if! (vec? v) (return v))
   (let [tag attr] v
+       from-key   @((key? %) (-> % str sect))
        has-attr   (dict? attr)
-       make-attr  (fn [k v] (str " " k "=\"" v "\""))
+       make-attr  (fn [k v] (str " " (from-key k) "=\"" v "\""))
        attr       (if has-attr (map make-attr attr) "")
-       tag        (-> tag str sect)
+       tag        (from-key tag)
        body       (sect v (has-attr 2 1))
        body       (map vec->html body))
-  (.. str "<" tag attr ">" body "</" tag ">"))
+  (if (["link" "meta" "input" "img"] tag)
+    (.. str "<" tag attr " />")
+    (.. str "<" tag attr ">" body "</" tag ">")))
 
 (vec->html
   [:div
     [:h2 "Hello"]
-    [:p ".PI is " [:b (round 2 PI)] "."]
-    [:p "Find more about Insitux on "
-       [:a {"href" "https://github.com/phunanon/Insitux"}
+    [:p "PI is " [:b (round 2 PI)] "."]
+    [:p "Find out about Insitux on "
+       [:a {:href "https://insitux.github.io"}
           "Github"]]])
-→ "<div><h2>Hello</h2><p>.PI is <b>3.14</b>.</p><p>Find more about Insitux on <a href="https://github.com/phunanon/Insitux">Github</a></p></div>"
+→ "<div><h2>Hello</h2><p>PI is <b>3.14</b>.</p><p>Find out about Insitux on <a href=\"https://insitux.github.io\">Github</a></p></div>"
 
 
 ; Neural network for genetic algorithms with two hidden layers
-(function sigmoid (/ 1 (inc (** E (- %)))))
+(function sigmoid (/ 1 (inc (** E (neg %)))))
 (function m (< .8 (rand)))
 
 (function make-brain  num-in num-out num-hid
   (let make-neuron #{:bias 0 :weights (repeat 1 %)})
-  [(repeat #(make-neuron num-in) num-hid)
-   (repeat #(make-neuron num-hid) num-hid)
-   (repeat #(make-neuron num-hid) num-out)])
+  [(repeat (make-neuron num-in)  num-hid)
+   (repeat (make-neuron num-hid) num-hid)
+   (repeat (make-neuron num-hid) num-out)])
 
 (function mutate  brain
   (let mutate-neuron
@@ -273,15 +273,14 @@ If anybody could improve this guide please make a PR!
       :weights (map @((m) (rand -1 1)) (:weights %))})
   (map (map mutate-neuron) brain))
 
-(function neuron-think  neuron inputs
+(function neuron-think  inputs neuron
   (let weighted (map * (:weights neuron) inputs)
-       average  (/ (.. + weighted) (len inputs)))
-  (sigmoid (+ average (:bias neuron))))
+       avg      (average weighted))
+  (sigmoid (+ avg (:bias neuron))))
 
 (function think  brain inputs
-  (let thoughts (map #(neuron-think % inputs)   (0 brain))
-       thoughts (map #(neuron-think % thoughts) (1 brain))
-       thoughts (map #(neuron-think % thoughts) (2 brain))))
+  (reduce (fn in layer (map @(neuron-think in) layer))
+          inputs brain))
 
 (var brain (mutate (make-brain 5 5 5)))
 (-> (repeat #(rand-int) 5)

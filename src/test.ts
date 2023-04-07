@@ -42,7 +42,7 @@ const tests: {
     out: `Hello, world!\nnull`,
   },
   { name: "1 + 1 = 2", code: `(+ 1 1)`, out: `2` },
-  { name: "Negate 1 = -1", code: `(- 1)`, out: `-1` },
+  { name: "Negate 1 = -1", code: `(neg 1)`, out: `-1` },
   { name: "(1+1)+1+(1+1) = 5", code: `(+ (+ 1 1) 1 (+ 1 1))`, out: `5` },
   { name: "Conditional head", code: `((if true + -) 12 9 1)`, out: `22` },
   {
@@ -159,6 +159,11 @@ const tests: {
   {
     name: "Loop",
     code: `(loop 3 i (print-str i))`,
+    out: `012null`,
+  },
+  {
+    name: "Loop over",
+    code: `(let v [0 1 2]) (loop-over v i (print-str i))`,
     out: `012null`,
   },
   {
@@ -323,8 +328,13 @@ const tests: {
   },
   {
     name: "Closure with captured f",
-    code: `[((fn x (@(val x))) 0) (var f val) ((fn x (@(f x))) 0)]`,
+    code: `[((fn x (@(val x))) 0) (var f val) ((fn y (@(f y))) 0)]`,
     out: `[0 val 0]`,
+  },
+  {
+    name: "Closure w/ inter-params",
+    code: `(function f x (fn y (fn z [x y z]))) (((f :a) :b) :c)`,
+    out: `[:a :b :c]`,
   },
   {
     name: "Destructure var",
@@ -475,7 +485,7 @@ export function doTests(
           state.output += str + (withNewLine ? "\n" : "");
         },
         exe: (name: string, args: Val[]) => exe(state, name, args),
-        functions: [],
+        functions: {},
         env,
         loopBudget: 10000,
         rangeBudget: 1000,

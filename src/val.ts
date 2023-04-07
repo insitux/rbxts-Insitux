@@ -1,10 +1,19 @@
-import { len, slice, splice } from "./poly-fills";
+import { flat, isStr, len, slice, splice } from "./poly-fills";
 import { assertUnreachable, Dict, Func, InvokeError, Val } from "./types";
 
 export const num = ({ v }: Val) => v as number;
 export const str = ({ v }: Val) => v as string;
 export const vec = ({ v }: Val) => v as Val[];
 export const dic = ({ v }: Val) => v as Dict;
+
+export const _boo = (v: boolean) => <Val>{ t: "bool", v };
+export const _num = (v: number) => <Val>{ t: "num", v };
+export const _str = (v = "") => <Val>{ t: "str", v };
+export const _key = (v: string) => <Val>{ t: "key", v };
+export const _vec = (v: Val[] = []) => <Val>{ t: "vec", v };
+export const _dic = (v: Dict) => <Val>{ t: "dict", v };
+export const _nul = () => <Val>{ t: "null", v: undefined };
+export const _fun = (v: string) => <Val>{ t: "func", v };
 
 export const isVecEqual = (a: Val[], b: Val[]): boolean =>
   len(a) === len(b) && !a.some((x, i) => !isEqual(x, b[i]));
@@ -84,6 +93,10 @@ export const asArray = (val: Val): Val[] =>
     : [];
 
 export const toDict = (args: Val[]): Val => {
+  if (len(args) === 1 && args[0].t === "vec") {
+    const [{ v }] = args;
+    args = flat(v.map((a) => (a.t === "vec" ? a.v : [a])));
+  }
   if (len(args) % 2 === 1) {
     args.pop();
   }
@@ -147,7 +160,11 @@ export function errorsToDict(errors: InvokeError[]) {
 
 /** Replaces or sets index or key/value with another value in a string or
  * dictionary */
-export function pathSet(path: Val[], replacement: Val, coll: Val): Val {
+export function pathSet(
+  path: Val[],
+  replacer: (v: Val) => Val,
+  coll: Val,
+): Val {
   //If we're at the end of the path or it's a non-number index for non-dict
   if (
     !len(path) ||
@@ -161,21 +178,30 @@ export function pathSet(path: Val[], replacement: Val, coll: Val): Val {
     const vecCopy = slice(coll.v);
     const idx = num(path[0]);
     if (len(path) === 1) {
-      vecCopy[idx] = replacement;
+      vecCopy[idx] = replacer(vecCopy[idx]);
       return { t: "vec", v: vecCopy };
     }
-    vecCopy[idx] = pathSet(slice(path, 1), replacement, vecCopy[idx]);
+    vecCopy[idx] = pathSet(slice(path, 1), replacer, vecCopy[idx]);
     return { t: "vec", v: vecCopy };
   }
   if (len(path) === 1) {
-    return { t: "dict", v: dictSet(coll.v, path[0], replacement) };
+    const existing = dictGet(coll.v, path[0]);
+    return { t: "dict", v: dictSet(coll.v, path[0], replacer(existing)) };
   }
   return {
     t: "dict",
     v: dictSet(
       coll.v,
       path[0],
-      pathSet(slice(path, 1), replacement, dictGet(coll.v, path[0])),
+      pathSet(slice(path, 1), replacer, dictGet(coll.v, path[0])),
     ),
   };
+}
+
+/** Incomplete. */
+export function jsToIx(v: unknown): Val {
+  if (isStr(v)) {
+    return { t: "str", v };
+  }
+  return { t: "str", v: `${v}` };
 }

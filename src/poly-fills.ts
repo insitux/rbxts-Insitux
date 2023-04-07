@@ -1,3 +1,8 @@
+export const isObj = (x: unknown): x is { [index: string]: unknown } =>
+  typeIs(x, "table");
+
+export const isStr = (x: unknown): x is string => typeIs(x, "string");
+
 function combine<T extends defined>(arr: (T[] | T)[]): T[] {
   const _result: T[] = [];
   const _combine = (arr: T[]) => {
@@ -22,7 +27,11 @@ export const toNum = (x: unknown): number => {
   else return 1 / 0;
 };
 
-export const slice = <T>(arr: T[], start?: number, _end?: number) => {
+export const slice = <T extends defined>(
+  arr: T[],
+  start?: number,
+  _end?: number,
+) => {
   const result: T[] = [];
 
   if (!start && !_end) {
@@ -49,7 +58,11 @@ export const trim = (lol: string) => {
   return lol;
 };
 
-export const splice = <T>(arr: T[], start: number, numDel?: number) => {
+export const splice = <T extends defined>(
+  arr: T[],
+  start: number,
+  numDel?: number,
+) => {
   const cond = numDel !== undefined ? numDel : arr.size();
   const deleted: T[] = [];
 
@@ -73,7 +86,7 @@ export const objKeys = (x: { [index: string]: unknown }): string[] => {
 
 export const isNum = (x: unknown): x is number =>
   x !== "" && tonumber(tostring(x)) !== undefined;
-export const flat = <T>(arr: T[][]): T[] => combine<T>(arr); //e.g. [[0], [1], []] => [0, 1]
+export const flat = <T extends defined>(arr: T[][]): T[] => combine<T>(arr); //e.g. [[0], [1], []] => [0, 1]
 export const has = (x: string | defined[], y: defined) => {
   if (typeIs(x, "string")) {
     return x.find(y as string, 1, true) !== undefined;
@@ -84,7 +97,7 @@ export const has = (x: string | defined[], y: defined) => {
 
 export const randNum = (a: number, b: number) => new Random().NextNumber(a, b);
 export const randInt = (a: number, b: number) => math.floor(randNum(a, b));
-export const concat = <T>(a: T[], b: T[]): T[] => {
+export const concat = <T extends defined>(a: T[], b: T[]): T[] => {
   const result: T[] = [];
   a.forEach((element) => result.push(element));
   b.forEach((element) => result.push(element));
@@ -105,7 +118,12 @@ export const starts = (str: string, x: string) => subIdx(str, x) === 0;
 export const ends = (str: string, x: string): boolean => str.sub(-1, -1) === x;
 export const replace = (str: string, what: string, to: string): string =>
   str.split(what).join(to);
-export const sortBy = <T>(arr: T[], by: (a: T, b: T) => number) =>
+export const rreplace = (str: string, what: string, to: string): string =>
+  string.gsub(str, what, to)[0];
+export const sortBy = <T extends defined>(
+  arr: T[],
+  by: (a: T, b: T) => number,
+) =>
   arr.sort((a, b) => {
     const res = by(a, b);
     return res === 1;
@@ -122,7 +140,7 @@ export const reverse = <T>(arr: T[]) => {
   return reversed;
 };
 
-export const push = <T>(arr: T[], add: T[]) => {
+export const push = <T extends defined>(arr: T[], add: T[]) => {
   add.forEach((element) => arr.push(element));
 };
 
