@@ -1,6 +1,6 @@
 export type Val =
   | { t: "vec"; v: Val[] }
-  | { t: "str" | "func" | "key" | "ref"; v: string }
+  | { t: "str" | "func" | "key" | "ref" | "unm"; v: string }
   | { t: "null"; v: undefined }
   | { t: "wild"; v: undefined }
   | { t: "bool"; v: boolean }
@@ -35,6 +35,7 @@ export type Funcs = { [key: string]: Func };
 export type Env = {
   funcs: Funcs;
   vars: { [key: string]: Val };
+  mocks: { [key: string]: Val };
 };
 
 /** A context supplied with an Insitux invocation to provide its environment. */
@@ -66,7 +67,7 @@ export type Ctx = {
 };
 
 export const defaultCtx = {
-  env: { funcs: {}, vars: {} },
+  env: { funcs: {}, vars: {}, mocks: {} },
   loopBudget: 1e7,
   rangeBudget: 1e6,
   callBudget: 1e8,
@@ -111,7 +112,10 @@ export type Operation = {
   params?: ("any" | Val["t"] | Val["t"][])[];
   returns?: [Val["t"], ...Val["t"][]];
 };
-export type ExternalHandler = (params: Val[]) => ValOrErr | void;
+export type ExternalHandler = (
+  params: Val[],
+  errCtx: ErrCtx,
+) => ValOrErr | void;
 export type ExternalFunction = {
   definition: Operation;
   handler: ExternalHandler;
@@ -206,6 +210,7 @@ export const ops: {
   average: { exactArity: 1, params: ["vec"], returns: ["num"] },
   vec: { returns: ["vec"] },
   dict: { returns: ["dict"] },
+  "kv-dict": { exactArity: 2, params: ["vec", "vec"], returns: ["dict"] },
   len: { exactArity: 1, params: [["str", "vec", "dict"]], returns: ["num"] },
   "to-num": {
     exactArity: 1,
@@ -250,6 +255,7 @@ export const ops: {
   adj: { returns: ["clo"] },
   comp: { minArity: 2, returns: ["clo"] },
   toggle: { exactArity: 2, returns: ["clo"] },
+  criteria: { minArity: 2, returns: ["clo"] },
   map: { minArity: 2, returns: ["vec"] },
   "flat-map": { minArity: 2, returns: ["vec"] },
   xmap: {
@@ -261,7 +267,7 @@ export const ops: {
   reduce: { minArity: 2, maxArity: 3 },
   reductions: { minArity: 2, maxArity: 3 },
   filter: {
-    minArity: 2,
+    exactArity: 2,
     params: ["any", ["vec", "dict", "str"]],
     returns: ["vec", "str", "dict"],
   },
@@ -275,7 +281,7 @@ export const ops: {
     params: ["any", ["vec", "dict", "str"]],
     returns: ["vec", "str", "dict"],
   },
-  find: { minArity: 2, params: ["any", ["vec", "dict", "str"]] },
+  find: { exactArity: 2, params: ["any", ["vec", "dict", "str"]] },
   "take-while": {
     exactArity: 2,
     params: ["any", ["vec", "str"]],
@@ -297,7 +303,7 @@ export const ops: {
     returns: ["vec", "str"],
   },
   count: {
-    minArity: 2,
+    exactArity: 2,
     params: ["any", ["vec", "dict", "str"]],
     returns: ["num"],
   },
@@ -320,6 +326,7 @@ export const ops: {
   ".": { minArity: 1 },
   "..": { minArity: 2 },
   "...": { minArity: 2 },
+  proj: { minArity: 2, returns: ["vec"] },
   into: {
     exactArity: 2,
     params: [
@@ -336,6 +343,11 @@ export const ops: {
   omit: {
     exactArity: 2,
     params: ["any", "dict"],
+    returns: ["dict"],
+  },
+  omits: {
+    exactArity: 2,
+    params: ["vec", "dict"],
     returns: ["dict"],
   },
   drop: {
@@ -411,10 +423,30 @@ export const ops: {
     params: ["any", ["vec", "dict", "str"]],
     returns: ["vec"],
   },
+  "part-when": {
+    exactArity: 2,
+    params: ["any", ["vec", "dict", "str"]],
+    returns: ["vec"],
+  },
+  "part-before": {
+    exactArity: 2,
+    params: ["any", ["vec", "dict", "str"]],
+    returns: ["vec"],
+  },
+  "part-after": {
+    exactArity: 2,
+    params: ["any", ["vec", "dict", "str"]],
+    returns: ["vec"],
+  },
   partition: {
     exactArity: 2,
     params: ["num", ["vec", "str"]],
     returns: ["vec"],
+  },
+  "skip-each": {
+    exactArity: 2,
+    params: ["num", ["vec", "str"]],
+    returns: ["vec", "str"],
   },
   freqs: { exactArity: 1, params: [["vec", "str"]], returns: ["dict"] },
   keys: { exactArity: 1, params: ["dict"] },
@@ -463,9 +495,13 @@ export const ops: {
   tests: { minArity: 0, maxArity: 1, params: ["bool"], returns: ["str"] },
   symbols: { minArity: 0, maxArity: 1, params: ["bool"], returns: ["vec"] },
   eval: { exactArity: 1, params: ["str"] },
-  about: { exactArity: 1, params: [["str", "func"]], returns: ["dict"] },
+  about: { exactArity: 1, params: [["str", "func", "unm"]], returns: ["dict"] },
   reset: { exactArity: 0 },
   recur: {},
+  assert: { minArity: 1 },
+  mock: { minArity: 2, returns: ["null"] },
+  unmock: { returns: ["null"] },
+  unmocked: { exactArity: 1, params: [["str", "func"]], returns: ["unm"] },
 };
 
 export const syntaxes = [
@@ -487,6 +523,7 @@ export const typeNames = {
   clo: "closure",
   wild: "wildcard",
   ext: "external",
+  unm: "unmocked callable",
 };
 
 export const assertUnreachable = (_x: never): never => <never>0;

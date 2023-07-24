@@ -1,4 +1,4 @@
-import { flat, isStr, len, slice, splice } from "./poly-fills";
+import { flat, len, max, slice, splice } from "./poly-fills";
 import { assertUnreachable, Dict, Func, InvokeError, Val } from "./types";
 
 export const num = ({ v }: Val) => v as number;
@@ -29,8 +29,8 @@ export const isEqual = (a: Val, b: Val) => {
     case "null":
       return true;
     case "bool":
-      return a.v === b.v;
     case "num":
+    case "unm":
       return a.v === b.v;
     case "vec":
       return isVecEqual(a.v, vec(b));
@@ -136,14 +136,26 @@ export const dictSet = ({ keys, vals }: Dict, key: Val, val: Val) => {
   return <Dict>{ keys: nKeys, vals: nVals };
 };
 
-export const dictDrop = ({ keys, vals }: Dict, key: Val) => {
+export const dictDrop = ({ keys, vals }: Dict, key: Val): Dict => {
   const [nKeys, nVals] = [slice(keys), slice(vals)];
   const idx = keys.findIndex((k) => isEqual(k, key));
   if (idx !== -1) {
     splice(nKeys, idx, 1);
     splice(nVals, idx, 1);
   }
-  return <Val>{ t: "dict", v: <Dict>{ keys: nKeys, vals: nVals } };
+  return { keys: nKeys, vals: nVals };
+};
+
+export const dictDrops = ({ keys, vals }: Dict, drop: Val[]): Dict => {
+  const [nKeys, nVals] = [slice(keys), slice(vals)];
+  drop.forEach((key) => {
+    const idx = nKeys.findIndex((k) => isEqual(k, key));
+    if (idx !== -1) {
+      splice(nKeys, idx, 1);
+      splice(nVals, idx, 1);
+    }
+  });
+  return { keys: nKeys, vals: nVals };
 };
 
 export function errorsToDict(errors: InvokeError[]) {
@@ -169,14 +181,14 @@ export function pathSet(
   if (
     !len(path) ||
     (coll.t !== "vec" && coll.t !== "dict") ||
-    (coll.t === "vec" &&
-      (path[0].t !== "num" || path[0].v < 0 || path[0].v > len(coll.v)))
+    (coll.t === "vec" && (path[0].t !== "num" || path[0].v > len(coll.v)))
   ) {
     return coll;
   }
   if (coll.t === "vec") {
     const vecCopy = slice(coll.v);
-    const idx = num(path[0]);
+    let idx = num(path[0]);
+    if (idx < 0) idx = max(len(vecCopy) + idx, 0);
     if (len(path) === 1) {
       vecCopy[idx] = replacer(vecCopy[idx]);
       return { t: "vec", v: vecCopy };
@@ -196,12 +208,4 @@ export function pathSet(
       pathSet(slice(path, 1), replacer, dictGet(coll.v, path[0])),
     ),
   };
-}
-
-/** Incomplete. */
-export function jsToIx(v: unknown): Val {
-  if (isStr(v)) {
-    return { t: "str", v };
-  }
-  return { t: "str", v: `${v}` };
 }

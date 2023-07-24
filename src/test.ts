@@ -104,7 +104,7 @@ const tests: {
     code: `(var f 1) (f [:a :b :c])`,
     out: `:b`,
   },
-  { name: "Apply op to var", code: `(var a 10) (var! a + 10)`, out: `20` },
+  { name: "Apply op to var", code: `(var a 5) (var! a - 10)`, out: `5` },
   {
     name: "Apply op to let",
     code: `(let a 10) (let! a (if true + -) (+ 2 3) 5)`,
@@ -163,8 +163,13 @@ const tests: {
   },
   {
     name: "Loop over",
-    code: `(let v [0 1 2]) (loop-over v i (print-str i))`,
+    code: `(let v [0 1 2]) (loop-over v x (print-str x))`,
     out: `012null`,
+  },
+  {
+    name: "Loop over empty",
+    code: `(loop-over [] x (print x))`,
+    out: `null`,
   },
   {
     name: "Catch error",
@@ -240,11 +245,16 @@ const tests: {
   },
   {
     name: "Closure 2",
-    code: `(filter #(or (.. = args) (even? %)) (range 10) 5)`,
+    code: `(filter #(or (= % 5) (even? %)) (range 10))`,
     out: `[0 2 4 5 6 8]`,
   },
   {
     name: "Closure 3",
+    code: `(map #(len args) (range 3) (range 3))`,
+    out: `[2 2 2]`,
+  },
+  {
+    name: "Closure 4",
     code: `(function f #(+ x x))
            (var x 10) (let c20 (f))
            (var x 20) (let c40 (f))
@@ -327,6 +337,11 @@ const tests: {
     out: `[2 1]`,
   },
   {
+    name: "Closure w/ var var",
+    code: `(var x 1) (let f (fn (var x (inc x)))) (f) (f)`,
+    out: `3`,
+  },
+  {
     name: "Closure with captured f",
     code: `[((fn x (@(val x))) 0) (var f val) ((fn y (@(f y))) 0)]`,
     out: `[0 val 0]`,
@@ -340,6 +355,11 @@ const tests: {
     name: "Destructure var",
     code: `(var [x [y]] [1 [2]]) [y x]`,
     out: `[2 1]`,
+  },
+  {
+    name: "Destructure bad",
+    code: `(var [a b [c d]] [0 1]) [a b c d]`,
+    out: `[0 1 null null]`,
   },
   {
     name: "Destructure string",
@@ -452,6 +472,23 @@ const tests: {
     err: ["Type"],
   },
   { name: "Parser arity error 1", code: `(abs)`, err: ["Parse"] },
+  //Testing
+  { name: "Assertion", code: `(assert "test" false)`, err: ["Assert"] },
+  {
+    name: "Mock & unmock",
+    code: `(mock print (var x)) (print 1) (unmock print) (print x)`,
+    out: `1\nnull`,
+  },
+  {
+    name: "Mock variable value",
+    code: `(let x do) (mock x *) (do 2 2)`,
+    out: `4`,
+  },
+  {
+    name: "Unmocked",
+    code: "(mock print do) ((unmocked print) 1)",
+    out: `1\nnull`,
+  },
 ];
 
 export function doTests(
@@ -475,7 +512,7 @@ export function doTests(
       dict: new Map<string, Val>(),
       output: "",
     };
-    const env: Env = { funcs: {}, vars: {} };
+    const env: Env = { funcs: {}, vars: {}, mocks: {} };
     const startTime = getTimeMs();
     const valOrErrs = invoke(
       {

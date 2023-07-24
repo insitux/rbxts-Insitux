@@ -409,9 +409,16 @@ function parseForm(
       if (!isToken(symNode)) {
         return err("argument 2 must be symbol");
       }
+      //(when (empty? <item>) null <exit>)
       //(let sym-item <item> sym-index 0 sym (sym-index sym-item)) ... body ...
       //(if (< (let sym-index (inc sym-index)) (len sym-item)) <exit> <loo>)
       const ins: ParserIns[] = [
+        ...parsed[0],
+        { typ: "val", value: { t: "func", v: "empty?" }, errCtx },
+        { typ: "exe", value: 1, errCtx },
+        { typ: "if", value: 2, errCtx },
+        { typ: "val", value: nullVal, errCtx },
+        { typ: "jmp", value: len(parsed[0]) + 9 + len(body) + 12, errCtx },
         ...parsed[0],
         { typ: "let", value: symNode.text + "-item", errCtx },
         { typ: "val", value: { t: "num", v: 0 }, errCtx },
@@ -451,7 +458,7 @@ function parseForm(
         push(ins, nodeParser(vals[d]));
         const def = defs[d];
         if (isToken(def)) {
-          const defIns = parseNode(defs[d], params);
+          const defIns = nodeParser(defs[d]);
           if (len(defIns) > 1 || defIns[0].typ !== "ref") {
             return err(symErrMsg, defIns[0].errCtx);
           }
@@ -470,7 +477,7 @@ function parseForm(
       }
       return ins;
     } else if (op === "var!" || op === "let!") {
-      //Rewrite e.g. (var! a + 1) -> (var a (+ a 1))
+      //Rewrite e.g. (var! a + 1) -> (var a (+ 1 a))
       if (len(nodes) < 2) {
         return err("provide 1 declaration name and 1 function");
       }
@@ -479,11 +486,14 @@ function parseForm(
       if (def.typ !== "ref") {
         return err("declaration name must be symbol", def.errCtx);
       }
-      const ins: Ins[] = [{ typ: "ref", value: def.value, errCtx }];
-      push(ins, [...flat(args), ...func]);
-      ins.push({ typ: "exe", value: len(args) + 1, errCtx });
       const typ = op === "var!" ? "var" : "let";
-      ins.push({ typ, value: def.value, errCtx });
+      const ins: ParserIns[] = [
+        ...flat(args),
+        { typ: "ref", value: def.value, errCtx },
+        ...func,
+        { typ: "exe", value: len(args) + 1, errCtx },
+        { typ, value: def.value, errCtx },
+      ];
       return ins;
     } else if (op === "#" || op === "@" || op === "fn") {
       const pins: ParserIns[] = [];
@@ -560,8 +570,23 @@ function parseForm(
   }
 
   const args = nodes.map(nodeParser);
+  const firstSym = symAt([firstNode]);
+  if (firstSym === "return-when") {
+    if (len(args) < 1) {
+      return [{ typ: "err", value: "provide a condition", errCtx }];
+    }
+    const cond = args[0];
+    const params = slice(args, 1);
+    const flatParams = flat(params);
+    return [
+      ...cond,
+      <ParserIns>{ typ: "if", value: len(flatParams) + 1, errCtx },
+      ...flatParams,
+      <ParserIns>{ typ: "ret", value: !!(len(args) - 1), errCtx },
+    ];
+  }
   const ins: ParserIns[] = flat(args);
-  if (symAt([firstNode]) === "return") {
+  if (firstSym === "return") {
     return [...ins, { typ: "ret", value: !!len(args), errCtx }];
   } else if (len(head) === 1 && head[0].typ === "ref") {
     //Transform potential external function into string
@@ -668,6 +693,16 @@ function parseParams(
 function compileFunc({ name, nodes }: NamedNodes): Func | InvokeError {
   const { shape: params, errors } = parseParams(nodes, false);
   const ins = [...errors, ...flat(nodes.map((node) => parseArg(node, params)))];
+  //Check for useless tail return
+  const lastIns = ins[len(ins) - 1];
+  if (lastIns && lastIns.typ === "ret") {
+    ins.push({
+      typ: "err",
+      value: "useless tail return - put the value itself",
+      errCtx: lastIns.errCtx,
+    });
+  }
+  //Check for parse errors
   for (let i = 0, lim = len(ins); i < lim; i++) {
     const { typ, value, errCtx } = ins[i];
     if (typ === "err") {
@@ -831,6 +866,8 @@ function insErrorDetect(fins: Ins[]): InvokeError[] | undefined {
           return errors;
         }
         stack.push({});
+        i += ins.value.length;
+        break;
       }
       case "ref":
       case "npa":
